@@ -9,6 +9,7 @@ Outputs:
     dist/safari/<blocker>.json         WebKit content-blocker lists
     dist/dns/blocklist.txt             one domain per line (Android sinkhole)
     dist/dns/allowlist.txt
+    dist/rep/...                       phishing/malware hash-prefix set + shards
     dist/report.json                   stats, list versions, sha256 of outputs
 """
 from __future__ import annotations
@@ -24,6 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .abp import ParseResult, detect_format, parse_abp, parse_hosts
+from . import reputation
 from .targets import chrome, cosmetic, dns, params, safari, scriptlets
 
 ALL_TARGETS = ("chrome", "safari", "dns")
@@ -240,6 +242,31 @@ def main(argv: list[str] | None = None) -> int:
         report["files"]["dns/dga_model.txt"] = hashlib.sha256(blob).hexdigest()
         report["dns"]["dga"] = {"flagThreshold": m["flagThreshold"], "blockThreshold": m["blockThreshold"]}
 
+    # ---- Reputation (hash-prefix set + shards) --------------------------------
+    if "reputation" in config:
+        rc = config["reputation"]
+        feed: list[str] = []
+        rep_sources = []
+        for i, src in enumerate(rc["sources"]):
+            print(f"• reputation: {src['url']}")
+            text = fetch(src["url"], args.cache, args.offline, f"rep-{i}")
+            for line in text.splitlines():
+                line = line.split("#", 1)[0].strip()
+                if line:
+                    parts = line.split()
+                    feed.append(parts[1] if len(parts) > 1 and parts[0] in ("0.0.0.0", "127.0.0.1") else parts[0])
+            rep_sources.append({"url": src["url"], "version": list_version(text), "license": src.get("license")})
+        popular = fetch(rc["popular"]["url"], args.cache, args.offline, "rep-popular").split()
+        canaries = (Path(__file__).resolve().parent.parent / "data" / "canaries.txt").read_text().split()
+        entries, rstats = reputation.clean_entries(feed, canaries, popular)
+        built = reputation.build(entries, out)
+        report["files"].update(built["files"])
+        report["reputation"] = {"sources": rep_sources, **rstats, **built["stats"]}
+        write_json(out / "rep" / "meta.json", {
+            "generatedAt": report["generatedAt"], "format": "see nullroute_compiler/reputation.py",
+            "shardBits": reputation.SHARD_BITS, "headBytes": reputation.HEAD_BYTES,
+            "entries": rstats["entries"], "prefixes": built["stats"]["prefixes"]}, pretty=True)
+
     write_json(out / "report.json", report, pretty=True)
     print(f"✓ Chrome: {total_rules} DNR rules | cosmetic: {cstats['generic']} generic + "
           f"{cstats['specific_selectors']} site-specific selectors")
@@ -248,6 +275,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"✓ Safari: " + ", ".join(f"{k}={v['safari']['rules']}" for k, v in report["rulesets"].items()
                                     if "safari" in v) + f", cosmetic={sstats['rules']}")
     print(f"✓ DNS: {dstats['domains']} blocked domains, {dstats['allow']} allowlisted")
+    if "reputation" in report:
+        r = report["reputation"]
+        print(f"✓ Reputation: {r['entries']} domains -> {r['prefixes']} prefixes, "
+              f"{r['prefixBytes'] / 1e6:.1f} MB ({r['bitsPerPrefix']} bits each), "
+              f"{len(r['droppedProtected'])} popular/protected entries dropped")
     return 0
 
 

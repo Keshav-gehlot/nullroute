@@ -224,7 +224,7 @@ DIST = Path(__file__).resolve().parents[2] / "dist"
 def test_dist_canaries_never_blocked():
     blocked = {l.strip() for l in (DIST / "dns/blocklist.txt").read_text().splitlines()
                if l.strip() and not l.startswith("#")}
-    canaries = (Path(__file__).parent / "fixtures/canaries.txt").read_text().split()
+    canaries = (Path(__file__).parent.parent / "data/canaries.txt").read_text().split()
     from nullroute_compiler.domains import parents
     offenders = {c: [p for p in parents(c) if p in blocked] for c in canaries}
     assert not {c: v for c, v in offenders.items() if v}

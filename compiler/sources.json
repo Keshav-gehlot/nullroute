@@ -73,5 +73,24 @@
     "url": "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_original_trackers.txt",
     "license": "MIT",
     "note": "Trackers that hide behind CNAME aliases. Used ONLY to judge CNAME targets on Android, never as direct blocks (it includes vendors' own sites)."
+  },
+  "reputation": {
+    "note": "Phishing, malware and scam domains. Too big to ship as a blocklist: compiled into a local hash-prefix set plus server-side shards (see nullroute_compiler/reputation.py).",
+    "sources": [
+      {
+        "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/tif-onlydomains.txt",
+        "license": "GPL-3.0",
+        "name": "HaGeZi Threat Intelligence Feeds"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-domains-ACTIVE.txt",
+        "license": "MIT",
+        "name": "Phishing.Database (active)"
+      }
+    ],
+    "popular": {
+      "url": "https://raw.githubusercontent.com/zer0h/top-1000000-domains/master/top-10000-domains",
+      "note": "Exact matches are never listed: a feed has no business blocking a top-10k site outright."
+    }
   }
 }
