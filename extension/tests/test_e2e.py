@@ -11,6 +11,8 @@ the server records which requests actually made it out of the browser.
 from __future__ import annotations
 
 import http.server
+import ssl
+import subprocess
 import json
 import threading
 import time
@@ -31,11 +33,13 @@ PIXEL = "ad.doubleclick.net/pixel.gif"
 
 class Recorder(http.server.BaseHTTPRequestHandler):
     hits: list[str] = []
+    cookies: dict[str, str] = {}   # "host/path" -> Cookie header received
     dynamic: bytes = b""
 
     def do_GET(self):  # noqa: N802
         host = self.headers.get("Host", "").split(":")[0]
         Recorder.hits.append(f"{host}{self.path.split('?')[0]}")
+        Recorder.cookies[f"{host}{self.path.split('?')[0]}"] = self.headers.get("Cookie", "")
         if self.path.startswith("/dynamic.html"):
             body, ctype = Recorder.dynamic, "text/html"
         elif self.path.startswith("/page.html"):
@@ -49,6 +53,12 @@ class Recorder(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if self.path.startswith("/setcookie"):
+            name = self.path.split("name=")[-1] if "name=" in self.path else "tid"
+            secure = isinstance(self.connection, ssl.SSLSocket)
+            # Over HTTPS, issue a real cross-site cookie (SameSite=None requires Secure).
+            attrs = "; SameSite=None; Secure" if secure else ""
+            self.send_header("Set-Cookie", f"{name}=1; Path=/; Max-Age=3600{attrs}")
         self.end_headers()
         self.wfile.write(body)
 
@@ -65,7 +75,23 @@ def server():
 
 
 @pytest.fixture(scope="module")
-def browser(server, tmp_path_factory):
+def tls_server(tmp_path_factory):
+    """HTTPS twin of `server` for *.tls hosts: real cross-site cookies need Secure."""
+    d = tmp_path_factory.mktemp("tls")
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(d / "k.pem"),
+                    "-out", str(d / "c.pem"), "-days", "1", "-subj", "/CN=nullroute-test"],
+                   check=True, capture_output=True)
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Recorder)
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.load_cert_chain(d / "c.pem", d / "k.pem")
+    srv.socket = tls.wrap_socket(srv.socket, server_side=True)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield srv.server_address[1]
+    srv.shutdown()
+
+
+@pytest.fixture(scope="module")
+def browser(server, tls_server, tmp_path_factory):
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(
             str(tmp_path_factory.mktemp("profile")),
@@ -74,16 +100,18 @@ def browser(server, tmp_path_factory):
             args=[
                 f"--disable-extensions-except={EXT}",
                 f"--load-extension={EXT}",
-                f"--host-resolver-rules=MAP * 127.0.0.1:{server}",
+                f"--host-resolver-rules=MAP *.tls 127.0.0.1:{tls_server},MAP * 127.0.0.1:{server}",
+                "--ignore-certificate-errors",   # self-signed cert for *.tls
+                "--no-proxy-server",             # talk to the local servers directly
             ],
         )
         sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker")
         ext_id = sw.url.split("/")[2]
         # Wait until onInstalled has reconciled settings into Chrome.
-        # Wait until onInstalled has finished reconciling: both the generic
-        # stylesheet and the MAIN-world scriptlets are registered last.
+        # Wait until onInstalled has finished reconciling: generic stylesheet,
+        # MAIN-world scriptlets and fingerprint protection are all registered.
         for _ in range(200):
-            if sw.evaluate("chrome.scripting.getRegisteredContentScripts().then(s => s.length)") >= 2:
+            if sw.evaluate("chrome.scripting.getRegisteredContentScripts().then(s => s.length)") >= 3:
                 break
             time.sleep(0.1)
         yield ctx, sw, ext_id
@@ -344,6 +372,133 @@ def test_all_regex_rules_supported_by_chrome(browser):
                 assert res["isSupported"], (f.name, rx, res)
 
 
+# ---------------------------------------------------------------- per-site controls (Brave Shields model)
+def control(ctx, ext_id, site, key, value):
+    settings(ctx, ext_id, {"type": "setSiteControl", "site": site, "key": key, "value": value})
+
+
+def test_aggressive_mode_blocks_third_party_scripts_per_site(browser):
+    ctx, _, ext_id = browser
+    Recorder.dynamic = (b'<!doctype html><script src="http://widgets.othervendor.test/w.js"></script>'
+                        b'<script src="/own.js"></script>')
+    visit(ctx, "http://agg.test/dynamic.html").close()
+    assert "widgets.othervendor.test/w.js" in Recorder.hits, "standard mode leaves unlisted 3p scripts alone"
+    control(ctx, ext_id, "agg.test", "trackers", "aggressive")
+    try:
+        visit(ctx, "http://agg.test/dynamic.html").close()
+        assert "widgets.othervendor.test/w.js" not in Recorder.hits
+        assert "agg.test/own.js" in Recorder.hits, "first-party scripts still load"
+        visit(ctx, "http://calm.test/dynamic.html").close()
+        assert "widgets.othervendor.test/w.js" in Recorder.hits, "other sites unaffected"
+    finally:
+        control(ctx, ext_id, "agg.test", "trackers", None)
+
+
+def test_block_scripts_per_site_and_shields_down_wins(browser):
+    ctx, _, ext_id = browser
+    Recorder.dynamic = b"<!doctype html><title>static</title><script>document.title = 'ran'</script>"
+    control(ctx, ext_id, "nojs.test", "blockScripts", True)
+    try:
+        page = visit(ctx, "http://nojs.test/dynamic.html")
+        assert page.title() == "static", "inline script must not run"
+        page.close()
+        page = visit(ctx, "http://yesjs.test/dynamic.html")
+        assert page.title() == "ran"
+        page.close()
+        # "Site broken? Turn NullRoute off for this site" must override everything.
+        settings(ctx, ext_id, {"type": "setSiteAllowed", "site": "nojs.test", "allowed": True})
+        page = visit(ctx, "http://nojs.test/dynamic.html")
+        assert page.title() == "ran"
+        page.close()
+    finally:
+        settings(ctx, ext_id, {"type": "setSiteAllowed", "site": "nojs.test", "allowed": False})
+        control(ctx, ext_id, "nojs.test", "blockScripts", None)
+
+
+def test_cross_site_cookies_stripped_per_site(browser):
+    ctx, _, ext_id = browser
+    T = "https://tracker.tls"
+    visit(ctx, f"{T}/setcookie?name=tid").close()          # tracker's own cookie (SameSite=None; Secure)
+    Recorder.dynamic = (f'<!doctype html><img src="{T}/pixel.gif">'
+                        f'<img src="{T}/setcookie?name=planted">').encode()
+    visit(ctx, "https://cookies-allowed.tls/dynamic.html").close()
+    assert "tid=1" in Recorder.cookies["tracker.tls/pixel.gif"], "baseline: cookie flows cross-site"
+    ctx.clear_cookies(domain="tracker.tls")
+    visit(ctx, f"{T}/setcookie?name=tid").close()
+    control(ctx, ext_id, "cookies-blocked.tls", "cookies", "block3p")
+    try:
+        visit(ctx, "https://cookies-blocked.tls/dynamic.html").close()
+        assert Recorder.cookies["tracker.tls/pixel.gif"] == "", "Cookie header stripped"
+        names = {c["name"] for c in ctx.cookies(T)}
+        assert "tid" in names and "planted" not in names, "Set-Cookie from the 3p response stripped"
+        visit(ctx, f"{T}/pixel.gif").close()
+        assert "tid=1" in Recorder.cookies["tracker.tls/pixel.gif"], "first-party visits keep their cookies"
+    finally:
+        control(ctx, ext_id, "cookies-blocked.tls", "cookies", None)
+
+
+FP_PAGE = b"""<!doctype html><script>
+const c = document.createElement('canvas'); c.width = 220; c.height = 60;
+const x = c.getContext('2d');
+x.fillStyle = '#f60'; x.fillRect(10, 10, 100, 40);
+x.fillStyle = '#069'; x.font = '18px Arial'; x.fillText('NullRoute fingerprint', 4, 30);
+const a = c.toDataURL(), b = c.toDataURL();
+const d1 = x.getImageData(0, 0, 220, 60).data, d2 = x.getImageData(0, 0, 220, 60).data;
+window.fp = { a, b, sameRead: a === b, sameData: d1.every((v, i) => v === d2[i]),
+              cores: navigator.hardwareConcurrency,
+              native: Function.prototype.toString.call(HTMLCanvasElement.prototype.toDataURL) };
+</script>"""
+
+
+def test_fingerprinting_noise_consistent_within_page_but_not_real(browser):
+    ctx, _, ext_id = browser
+    Recorder.dynamic = FP_PAGE
+    control(ctx, ext_id, "real.test", "fingerprinting", False)
+    try:
+        page = visit(ctx, "http://real.test/dynamic.html")
+        real = page.evaluate("window.fp")
+        real_cores = page.evaluate("navigator.hardwareConcurrency")
+        page.close()
+        page = visit(ctx, "http://protected.test/dynamic.html")
+        fp1 = page.evaluate("window.fp")
+        page.close()
+        page = visit(ctx, "http://protected.test/dynamic.html")
+        fp2 = page.evaluate("window.fp")
+        page.close()
+    finally:
+        control(ctx, ext_id, "real.test", "fingerprinting", None)
+    assert fp1["sameRead"] and fp1["sameData"], "double-render check must not detect noise"
+    assert fp1["a"] != real["a"], "readback differs from the real fingerprint"
+    assert fp1["a"] != fp2["a"], "fingerprint can't be linked across page loads"
+    assert "[native code]" in fp1["native"], "wrapped function still looks native"
+    assert 2 <= fp1["cores"] <= max(real_cores, 2)
+
+
+def test_forget_site_data_now_and_on_close(browser):
+    ctx, _, ext_id = browser
+    Recorder.dynamic = (b"<!doctype html><script>if (location.search === '?set') {"
+                        b"localStorage.setItem('k', 'v'); document.cookie = 'sid=42; Max-Age=3600; Path=/'; }"
+                        b"window.state = [localStorage.getItem('k'), document.cookie];</script>")
+    page = visit(ctx, "http://shred.test/dynamic.html?set")
+    assert page.evaluate("window.state") == ["v", "sid=42"]
+    settings(ctx, ext_id, {"type": "shredSite", "site": "shred.test"})
+    page.goto("http://shred.test/dynamic.html")      # no ?set: just read what survived
+    assert page.evaluate("window.state") == [None, ""], "manual forget clears storage and cookies"
+    page.close()
+
+    control(ctx, ext_id, "autoshred.test", "autoShred", True)
+    try:
+        page = visit(ctx, "http://autoshred.test/dynamic.html?set")
+        assert page.evaluate("window.state") == ["v", "sid=42"]
+        page.close()                                  # last tab for the site closes
+        time.sleep(1.5)
+        page = visit(ctx, "http://autoshred.test/dynamic.html")
+        assert page.evaluate("window.state") == [None, ""], "auto-forget on close"
+        page.close()
+    finally:
+        control(ctx, ext_id, "autoshred.test", "autoShred", None)
+
+
 def test_ui_pages_render(browser, tmp_path):
     ctx, sw, ext_id = browser
     page = visit(ctx)
@@ -363,7 +518,8 @@ def test_ui_pages_render(browser, tmp_path):
     opts.on("pageerror", lambda e: errors.append(str(e)))
     opts.goto(f"chrome-extension://{ext_id}/src/options.html")
     opts.wait_for_selector(".list")
-    assert opts.locator(".list").count() == 6
+    assert opts.locator("#lists .list").count() == 6
+    assert opts.locator("#defaults .list").count() == 5
     opts.screenshot(path=str(out / "options.png"), full_page=True)
     assert not errors, errors
     for p in (page, popup, opts):

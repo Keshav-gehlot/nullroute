@@ -33,3 +33,12 @@ textarea:focus { border-color: var(--route); outline: none; box-shadow: 0 0 0 3p
 #saveStatus { color: var(--muted); font-size: 13px; }
 .credits { margin-top: 32px; color: var(--muted); font-size: 12.5px; }
 .credits a { color: inherit; }
+
+.list select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); }
+.subhead { font-size: 14px; margin: 22px 0 8px; }
+.overrides { list-style: none; margin: 0; padding: 0; }
+.overrides li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.overrides code { font-family: var(--mono); font-size: 13px; }
+.overrides .what { flex: 1; color: var(--muted); font-size: 12.5px; }
+.overrides .empty { color: var(--muted); border: 0; }
+.link { background: none; border: 0; color: var(--route); cursor: pointer; padding: 0; font: inherit; }

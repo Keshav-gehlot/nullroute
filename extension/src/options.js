@@ -62,6 +62,49 @@ async function renderLists() {
     (status.paused ? ' Blocking is paused — resume it from the toolbar popup.' : '');
 }
 
+const LABELS = {
+  trackers: v => (v === 'aggressive' ? 'aggressive blocking' : 'standard blocking'),
+  blockScripts: v => (v ? 'scripts blocked' : 'scripts allowed'),
+  cookies: v => (v === 'block3p' ? 'cross-site cookies blocked' : 'cross-site cookies allowed'),
+  fingerprinting: v => (v ? 'fingerprinting blocked' : 'fingerprinting allowed'),
+  autoShred: v => (v ? 'forgotten on close' : 'kept on close'),
+};
+
+async function renderShields() {
+  const status = await send({ type: 'getStatus', tabId: -1, url: '' });
+  for (const el of document.querySelectorAll('[data-global]')) {
+    const key = el.dataset.global;
+    const v = status.globals[key];
+    if (el.tagName === 'SELECT') el.value = v;
+    else el.checked = key === 'cookies' ? v === 'block3p' : !!v;
+  }
+  const list = $('overrides');
+  const entries = Object.entries(status.siteOverrides || {}).sort(([a], [b]) => a.localeCompare(b));
+  list.replaceChildren(...(entries.length ? entries.map(([site, o]) => {
+    const li = document.createElement('li');
+    const code = document.createElement('code');
+    code.textContent = site;
+    const what = document.createElement('span');
+    what.className = 'what';
+    what.textContent = Object.entries(o).map(([k, v]) => LABELS[k]?.(v) ?? k).join(', ');
+    const reset = document.createElement('button');
+    reset.className = 'link';
+    reset.textContent = 'Use defaults';
+    reset.addEventListener('click', async () => { await send({ type: 'resetSite', site }); renderShields(); });
+    li.append(code, what, reset);
+    return li;
+  }) : [Object.assign(document.createElement('li'), { className: 'empty', textContent: 'None yet. Change a site from the toolbar popup.' })]));
+}
+
+for (const el of document.querySelectorAll('[data-global]')) {
+  el.addEventListener('change', async () => {
+    const key = el.dataset.global;
+    const value = el.tagName === 'SELECT' ? el.value : key === 'cookies' ? (el.checked ? 'block3p' : 'allow3p') : el.checked;
+    try { await send({ type: 'setGlobalDefault', key, value }); } catch (e) { $('saveStatus').textContent = e.message; }
+    renderShields();
+  });
+}
+
 async function load() {
   const { allowlist = [], userFilters = '' } = await chrome.storage.local.get(['allowlist', 'userFilters']);
   $('allowlist').value = allowlist.join('\n');
@@ -69,6 +112,7 @@ async function load() {
   renderErrors($('filterErrors'), parseUserFilters(userFilters).errors);
   $('version').textContent = `Version ${chrome.runtime.getManifest().version}`;
   await renderLists();
+  await renderShields();
 }
 
 $('allowlist').addEventListener('input', markDirty);
@@ -109,6 +153,7 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.userFilters) $('userFilters').value = changes.userFilters.newValue || '';
   if (changes.allowlist) $('allowlist').value = (changes.allowlist.newValue || []).join('\n');
   if (changes.paused || changes.enabledRulesets) renderLists();
+  if (changes.globalDefaults || changes.siteOverrides) renderShields();
 });
 
 load().catch(e => { $('saveStatus').textContent = e.message; });

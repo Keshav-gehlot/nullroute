@@ -3,7 +3,7 @@
   "name": "NullRoute",
   "short_name": "NullRoute",
   "version": "1.0.0",
-  "description": "Fast, private ad & tracker blocker. Blocks network requests with Chrome's declarativeNetRequest engine — no page data ever leaves your browser.",
+  "description": "Fast, private ad & tracker blocker. Blocks network requests with Chrome's declarativeNetRequest engine \u2014 no page data ever leaves your browser.",
   "minimum_chrome_version": "121",
   "permissions": [
     "declarativeNetRequest",
@@ -11,7 +11,9 @@
     "scripting",
     "webNavigation",
     "storage",
-    "contextMenus"
+    "contextMenus",
+    "browsingData",
+    "contentSettings"
   ],
   "host_permissions": [
     "<all_urls>"

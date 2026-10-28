@@ -6,13 +6,13 @@ NullRoute compiles the community-maintained lists that power uBlock Origin and A
 
 | Platform | Mechanism | What it blocks |
 |---|---|---|
-| **Chrome** (MV3) | `declarativeNetRequest` static rulesets, user-origin CSS, MAIN-world scriptlets | Network requests, CNAME-cloaked trackers, click-ID link tracking, anti-adblock scripts, on-page ad slots |
+| **Chrome** (MV3) | `declarativeNetRequest` static + dynamic rules, user-origin CSS, MAIN-world scriptlets, content settings | Network requests, CNAME-cloaked trackers, click-ID link tracking, anti-adblock scripts, on-page ad slots, plus Brave-style per-site controls (scripts, cross-site cookies, fingerprinting, site data) |
 | **Android** | Local `VpnService` DNS sinkhole with **CNAME uncloaking** (only DNS enters the tunnel) | Ad and tracker domains in **every app**, including trackers disguised as first-party subdomains |
 | **iOS / Safari** | Four Safari content-blocker extensions (WebKit rule lists) | Network requests and element hiding in Safari |
 
 Blocking is always done by the browser or OS engine itself. NullRoute never proxies your traffic, never sees page contents, and keeps no browsing history on disk.
 
-<p align="center"><img src="docs/popup.png" width="300" alt="Chrome extension popup"> <img src="docs/picker.png" width="480" alt="Element picker"></p>
+<p align="center"><img src="docs/popup-advanced.png" width="300" alt="Chrome extension popup with per-site advanced controls"> <img src="docs/picker.png" width="480" alt="Element picker"></p>
 
 ---
 
@@ -62,7 +62,14 @@ flowchart LR
 - **Scriptlets in the page's MAIN world** at `document_start`, before any page script runs: `abort-on-property-read`/`-write`, `abort-current-script`, `set-constant`, `json-prune`, `addEventListener-defuser`, `no-setTimeout-if`/`no-setInterval-if` and `no-window-open-if`. Together these cover 2,726 rules on 2,073 sites. They follow uBlock Origin's semantics, and list arguments are only ever used as property paths and patterns, never evaluated as code.
 - **Link-tracking removal.** 33 per-user click identifiers (`gclid`, `fbclid`, `msclkid`, `ttclid`, …) are stripped from navigations with DNR `queryTransform` redirects before the request leaves the browser. `utm_*` campaign tags are kept on purpose: they identify a campaign rather than a person, and removing them breaks landing pages.
 - **CNAME-cloaked trackers.** Chrome gives extensions no DNS API, so it can't uncloak at runtime. Instead, AdGuard's pre-resolved list of cloaked first-party subdomains is compiled into rules.
-- **Popup:** a per-site on/off switch, a live per-category breakdown (ads, trackers, bad hosts, link tracking, my filters), and a "Pause everywhere" toggle.
+- **Per-site advanced controls, modelled on Brave Shields.** Every site uses the global defaults (set on the options page) unless you change it from the popup; site changes win, cover subdomains, and are listed with a one-click reset:
+  - *Trackers & ads: Aggressive* adds one dynamic DNR rule that blocks all third-party scripts and frames on that site (uBlock Origin's "medium mode"). Its priority sits above every list exception and below "shields down".
+  - *Block scripts* uses `chrome.contentSettings.javascript`, which also stops inline scripts and event handlers. DNR alone can only block script files.
+  - *Block cross-site cookies* is a DNR `modifyHeaders` rule that strips `Cookie` from third-party requests and `Set-Cookie` from their responses. First-party visits keep their cookies.
+  - *Block fingerprinting* (on by default) adds per-page noise to canvas (`toDataURL`, `toBlob`, `getImageData`) and Web Audio readback, and reports a plausible CPU count. The noise is a pure function of a per-page seed and the content, so drawing the same canvas twice gives identical results; per-call random noise is easy to detect that way (IMC 2025). The wrappers are Proxies, so `toString()` still says `[native code]`.
+  - *Forget site data* clears cookies, storage, IndexedDB, caches and service workers for the site, either on demand or automatically when its last tab closes. Tab-to-site mapping lives in `chrome.storage.session`, so it survives service-worker restarts.
+  - *"Site broken? Turn NullRoute off for this site."* Shields down (priority 100 `allowAllRequests`) overrides every other control, including script blocking and fingerprint protection.
+- **Popup:** a per-site on/off switch, a live per-category breakdown (ads, trackers, bad hosts, link tracking, my filters), the advanced controls, and a "Pause everywhere" toggle.
 - **Element picker:** hover, click and press Enter to hide anything. Its UI lives in a closed shadow DOM, and selectors that look auto-generated (hashes, CSS-in-JS) are skipped so rules survive site rebuilds.
 - **Options page:** list toggles that surface Chrome's rule-budget errors, an allowed-sites list, and custom filters in a safe ABP subset.
 
@@ -103,7 +110,8 @@ flowchart LR
 | Suite | What it proves |
 |---|---|
 | `compiler/tests` (51 tests) | ABP parsing edge cases, rule folding, Safari regex semantics checked against real URLs, WebKit dialect validation, canary domains, Chrome budget, `report.json` hashes |
-| `extension/tests` (16 Chromium end-to-end tests) | Loads the real extension, maps every hostname to a local server with `--host-resolver-rules`, and checks **which requests actually left the browser**. Covers every list, CNAME-cloaked subdomains, click-ID stripping (campaign tags kept), real uBlock scriptlets running before page scripts (and not on other sites), generic and site-specific hiding, allowlisting, custom filters, pause, per-list toggles, the element picker, and Chrome's own `isRegexSupported` check on every regex rule |
+| `extension/tests/shields.test.mjs` (8 Node unit tests) | The per-site controls model: override resolution and inheritance, invalid stored values, DNR rule generation for aggressive mode and cookies, content-settings precedence, fingerprint-script registration, shred origins |
+| `extension/tests` (21 Chromium end-to-end tests) | Loads the real extension, maps every hostname to local HTTP and HTTPS servers with `--host-resolver-rules`, and checks **which requests actually left the browser**. Covers every list, CNAME-cloaked subdomains, click-ID stripping (campaign tags kept), real uBlock scriptlets running before page scripts (and not on other sites), generic and site-specific hiding, allowlisting, custom filters, pause, per-list toggles, the element picker, and Chrome's own `isRegexSupported` check on every regex rule. The per-site control tests cover aggressive mode, script blocking (with shields down overriding it), and real `SameSite=None; Secure` cookies over HTTPS proving `Cookie` and `Set-Cookie` are stripped only cross-site. They also check that canvas noise is identical within a page but differs from the real value and across loads, and that site data is cleared both on demand and when the last tab closes |
 | `android/core` (28 tests) | Packets generated by **scapy** and **dnslib** (independent implementations) parse correctly, our IPv6 encoder reproduces scapy's bytes exactly, **CNAME chains with name compression** are uncloaked while benign CDN aliases pass untouched, pointer loops terminate, the DoH canary answers NXDOMAIN, and **real UDP forwarding** against a local resolver works, including spoofed-ID rejection and failover |
 
 CI (`.github/workflows/ci.yml`) runs all of these. It also builds the Android APK with lint and the iOS app for the simulator.
@@ -126,6 +134,21 @@ The design decisions trace back to the measurement and systems literature on ad 
 
 One claim was checked rather than copied. A survey cited a 50,000-rule cap per Safari content blocker; that figure predates Safari 15. The current limit is 150,000, which the iOS blockers are sized for.
 
+**Brave Shields' controls, mapped to what an extension can do**
+
+| Brave Shields control | NullRoute |
+|---|---|
+| Trackers & ads (Standard / Aggressive / Allow all) | Lists; per-site aggressive rule; per-site shields down |
+| Block scripts | `contentSettings.javascript`, per site or global |
+| Block cookies | DNR `modifyHeaders` cross-site `Cookie` / `Set-Cookie` stripping |
+| Block fingerprinting | MAIN-world canvas and audio farbling, consistent within a page |
+| Shred site's data (+ on close) | `browsingData.remove` by origin, manually or when the last tab closes |
+| Block element | Element picker |
+| Global settings | Options page "Defaults for every site", with a list of site overrides |
+| Upgrade connections to HTTPS | **Left to Chrome.** Chrome 115+ upgrades navigations natively *with* HTTP fallback; a DNR `upgradeScheme` rule has no fallback and would break HTTP-only sites. |
+
+On mobile, the Android app's per-app exclusions play the same role as per-site overrides (DNS has no notion of the page you're on). Safari already blocks cross-site cookies by default, and its content blockers can't run scripts, so the remaining controls don't apply there.
+
 **Deliberately not applied**
 
 - **YouTube video ads.** Both reports describe YouTube's SABR protocol: stripping ad placements client-side triggers a server-enforced backoff of about 80% of the ad duration, so json-prune-style blocking now produces "fake buffering". NullRoute makes no YouTube video-ad claim.
@@ -137,7 +160,7 @@ One claim was checked rather than copied. A survey cited a 50,000-rule cap per S
 
 ```bash
 make lists        # fetch + compile lists into dist/
-make test         # compiler tests + Chrome e2e tests (needs: pip install pytest playwright)
+make test         # compiler tests + Chrome unit & e2e tests (needs: pip install pytest playwright, openssl)
 ```
 
 **Chrome:** run `make extension`, open `chrome://extensions`, enable Developer mode, click **Load unpacked**, and choose `extension/`.

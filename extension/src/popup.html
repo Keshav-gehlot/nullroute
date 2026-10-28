@@ -12,6 +12,7 @@
       <div class="site-text">
         <h1 id="host">—</h1>
         <p id="status" class="status" role="status">Checking this page…</p>
+        <p id="brokenHint" class="hint" hidden>Site broken? Turn NullRoute off for this site.</p>
       </div>
       <label class="switch" title="Block ads and trackers on this site">
         <input type="checkbox" id="siteToggle" aria-label="Block ads and trackers on this site">
@@ -25,6 +26,45 @@
       <div class="bar" id="bar" aria-hidden="true"></div>
       <ul class="legend" id="legend"></ul>
     </section>
+
+    <details class="advanced" id="advanced">
+      <summary>
+        <span>Advanced controls</span>
+        <span class="summary-note" id="advancedNote"></span>
+      </summary>
+      <div class="controls" id="controls">
+        <div class="control">
+          <div class="label">
+            <strong>Trackers &amp; ads</strong>
+            <small id="trackersHint">Aggressive also blocks 3rd-party scripts</small>
+          </div>
+          <div class="segmented" role="radiogroup" aria-label="Trackers and ads blocking level">
+            <button type="button" role="radio" data-key="trackers" data-value="standard">Standard</button>
+            <button type="button" role="radio" data-key="trackers" data-value="aggressive">Aggressive</button>
+          </div>
+        </div>
+        <label class="control">
+          <span class="label"><strong>Block scripts</strong><small data-source="blockScripts"></small></span>
+          <span class="switch"><input type="checkbox" data-key="blockScripts" aria-label="Block scripts on this site"><span class="track"></span></span>
+        </label>
+        <label class="control">
+          <span class="label"><strong>Block cross-site cookies</strong><small data-source="cookies"></small></span>
+          <span class="switch"><input type="checkbox" data-key="cookies" aria-label="Block cross-site cookies on this site"><span class="track"></span></span>
+        </label>
+        <label class="control">
+          <span class="label"><strong>Block fingerprinting</strong><small data-source="fingerprinting"></small></span>
+          <span class="switch"><input type="checkbox" data-key="fingerprinting" aria-label="Block fingerprinting on this site"><span class="track"></span></span>
+        </label>
+        <label class="control">
+          <span class="label"><strong>Forget this site when I close it</strong><small data-source="autoShred"></small></span>
+          <span class="switch"><input type="checkbox" data-key="autoShred" aria-label="Forget this site's data when its last tab closes"><span class="track"></span></span>
+        </label>
+        <div class="control-actions">
+          <button class="btn" id="shred">Forget site data</button>
+          <button class="link" id="resetSite" hidden>Use default settings</button>
+        </div>
+      </div>
+    </details>
 
     <section class="actions">
       <button class="btn" id="picker">Hide an element on this page</button>

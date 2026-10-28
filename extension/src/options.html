@@ -24,6 +24,38 @@
       <p class="meta" id="listsMeta"></p>
     </section>
 
+    <section aria-labelledby="defaultsTitle">
+      <h2 id="defaultsTitle">Defaults for every site</h2>
+      <p class="lede">Each site uses these unless you change it from the toolbar popup. Site changes win over defaults.</p>
+      <div class="lists" id="defaults">
+        <div class="list">
+          <div class="name"><strong>Trackers &amp; ads</strong><small>Aggressive also blocks every third-party script and frame. Expect some sites to break.</small></div>
+          <select data-global="trackers" aria-label="Default trackers and ads level">
+            <option value="standard">Standard</option>
+            <option value="aggressive">Aggressive</option>
+          </select>
+        </div>
+        <div class="list">
+          <div class="name"><strong>Block scripts</strong><small>Stops all JavaScript. Most modern sites won't work.</small></div>
+          <label class="switch"><input type="checkbox" data-global="blockScripts" aria-label="Block scripts by default"><span class="track"></span></label>
+        </div>
+        <div class="list">
+          <div class="name"><strong>Block cross-site cookies</strong><small>Embedded third parties can't read or set cookies. Can break sign-in widgets.</small></div>
+          <label class="switch"><input type="checkbox" data-global="cookies" aria-label="Block cross-site cookies by default"><span class="track"></span></label>
+        </div>
+        <div class="list">
+          <div class="name"><strong>Block fingerprinting</strong><small>Adds per-page noise to canvas and audio readings and hides your exact CPU count.</small></div>
+          <label class="switch"><input type="checkbox" data-global="fingerprinting" aria-label="Block fingerprinting by default"><span class="track"></span></label>
+        </div>
+        <div class="list">
+          <div class="name"><strong>Forget sites when closed</strong><small>Clears a site's cookies and storage when its last tab closes. You'll be signed out.</small></div>
+          <label class="switch"><input type="checkbox" data-global="autoShred" aria-label="Forget sites when closed by default"><span class="track"></span></label>
+        </div>
+      </div>
+      <h3 class="subhead">Sites with their own settings</h3>
+      <ul class="overrides" id="overrides"></ul>
+    </section>
+
     <section aria-labelledby="allowTitle">
       <h2 id="allowTitle">Allowed sites</h2>
       <p class="lede">Nothing is blocked or hidden on these sites or their subdomains. One per line.</p>

@@ -11,6 +11,10 @@
 import { CosmeticEngine } from './lib/cosmetic.js';
 import { hostOf, isValidDomain, matchesAny, matchPatternFor, normalizeDomain } from './lib/domains.js';
 import { parseUserFilters } from './lib/userfilters.js';
+import {
+  buildShieldsRules, effective, fingerprintRegistration, isValidControl, normalizeGlobals,
+  overrideFor, RULE_AGGRESSIVE, RULE_COOKIES, scriptSettings, setOverride, shredOrigins,
+} from './lib/shields.js';
 
 const ALLOWLIST_RULE_ID = 1;
 const USER_RULE_BASE = 1000;
@@ -18,12 +22,15 @@ const GENERIC_SCRIPT_ID = 'nr-generic-css';
 const SCRIPTLET_SCRIPT_ID = 'nr-scriptlets';
 const SCRIPTLET_RULESET = 'ublock'; // scriptlets ship with the uBlock filters list
 const MENU_PICKER = 'nr-picker';
+const FARBLE_SCRIPT_ID = 'nr-farble';
 
 const DEFAULTS = {
   paused: false,
   allowlist: [],          // user-allowlisted domains
   userFilters: '',        // raw "My filters" text
   enabledRulesets: null,  // null = manifest defaults
+  globalDefaults: {},     // shields defaults for every site (see lib/shields.js)
+  siteOverrides: {},      // per-site shields overrides
 };
 
 // ---------------------------------------------------------------- state
@@ -65,6 +72,8 @@ async function doReconcile() {
   await applyDynamicRules(state);
   await applyGenericStylesheet(state);
   await applyScriptlets(state);
+  await applyScriptBlocking(state);
+  await applyFingerprinting(state);
   await chrome.action.setBadgeBackgroundColor({ color: state.paused ? '#b7790a' : '#2f5bea' });
   await chrome.action.setTitle({ title: state.paused ? 'NullRoute (paused)' : 'NullRoute' });
 }
@@ -93,6 +102,7 @@ async function applyDynamicRules(state) {
         condition: { requestDomains: state.allowlist, resourceTypes: ['main_frame', 'sub_frame'] },
       });
     }
+    addRules.push(...buildShieldsRules(state.globalDefaults, state.siteOverrides));
     const { rules } = parseUserFilters(state.userFilters);
     rules.forEach((r, i) => addRules.push({ id: USER_RULE_BASE + i, ...r }));
   }
@@ -143,6 +153,69 @@ async function applyScriptlets(state) {
   }]);
 }
 
+// Per-site JavaScript blocking uses Chrome's own content settings, which also
+// stop inline scripts and event handlers — DNR can only block script files.
+async function applyScriptBlocking(state) {
+  await chrome.contentSettings.javascript.clear({});
+  if (state.paused) return;
+  for (const s of scriptSettings(state.globalDefaults, state.siteOverrides, state.allowlist)) {
+    await chrome.contentSettings.javascript.set(s);
+  }
+}
+
+async function applyFingerprinting(state) {
+  const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [FARBLE_SCRIPT_ID] });
+  if (registered.length) await chrome.scripting.unregisterContentScripts({ ids: [FARBLE_SCRIPT_ID] });
+  if (state.paused) return;
+  const reg = fingerprintRegistration(state.globalDefaults, state.siteOverrides, state.allowlist);
+  if (!reg) return;
+  await chrome.scripting.registerContentScripts([{
+    id: FARBLE_SCRIPT_ID,
+    js: ['src/shields/farble.js'],
+    world: 'MAIN',
+    matches: reg.matches,
+    excludeMatches: reg.excludeMatches,
+    allFrames: true,
+    // Also run in about:blank / srcdoc frames, a classic trick for grabbing
+    // untouched canvas prototypes from a fresh iframe.
+    matchOriginAsFallback: true,
+    runAt: 'document_start',
+    persistAcrossSessions: true,
+  }]);
+}
+
+// ---------------------------------------------------------------- site data ("shred")
+async function shredSite(site) {
+  const tabs = await chrome.tabs.query({});
+  const origins = shredOrigins(site, tabs.map(t => t.url).filter(Boolean));
+  await chrome.browsingData.remove({ origins }, {
+    cookies: true, localStorage: true, indexedDB: true, cacheStorage: true,
+    serviceWorkers: true, fileSystems: true, cache: true,
+  });
+  return origins;
+}
+
+// Auto-shred: remember each tab's site (session storage survives worker
+// restarts) and clear the site's data when its last tab closes.
+async function rememberTabSite(tabId, url) {
+  const host = hostOf(url);
+  const { tabSites = {} } = await chrome.storage.session.get('tabSites');
+  if (host) tabSites[tabId] = normalizeDomain(host) || host; else delete tabSites[tabId];
+  await chrome.storage.session.set({ tabSites });
+}
+
+async function onTabClosed(tabId) {
+  const { tabSites = {} } = await chrome.storage.session.get('tabSites');
+  const site = tabSites[tabId];
+  delete tabSites[tabId];
+  await chrome.storage.session.set({ tabSites });
+  if (!site) return;
+  const state = await getState();
+  if (state.paused || !effective(site, state.globalDefaults, state.siteOverrides).autoShred) return;
+  const stillOpen = Object.values(tabSites).some(s => s === site || s.endsWith(`.${site}`) || site.endsWith(`.${s}`));
+  if (!stillOpen) await shredSite(site).catch(e => console.warn('[NullRoute] auto-shred failed', e));
+}
+
 // ---------------------------------------------------------------- cosmetic injection
 const topHosts = new Map(); // tabId -> top-level hostname (rebuilt lazily after restarts)
 
@@ -177,9 +250,14 @@ async function injectCosmetic(tabId, frameId, url) {
 }
 
 chrome.webNavigation.onCommitted.addListener(({ tabId, frameId, url }) => {
-  if (tabId >= 0) injectCosmetic(tabId, frameId, url);
+  if (tabId < 0) return;
+  injectCosmetic(tabId, frameId, url);
+  if (frameId === 0) rememberTabSite(tabId, url);
 });
-chrome.tabs?.onRemoved?.addListener(tabId => topHosts.delete(tabId));
+chrome.tabs.onRemoved.addListener(tabId => {
+  topHosts.delete(tabId);
+  onTabClosed(tabId);
+});
 
 // ---------------------------------------------------------------- element picker
 async function startPicker(tabId) {
@@ -211,15 +289,60 @@ const handlers = {
       const { rulesMatchedInfo } = await chrome.declarativeNetRequest.getMatchedRules({ tabId });
       counts = {};
       for (const m of rulesMatchedInfo) {
-        const key = m.rule.rulesetId === '_dynamic' ? 'custom' : m.rule.rulesetId;
-        if (m.rule.rulesetId === '_dynamic' && m.rule.ruleId === ALLOWLIST_RULE_ID) continue;
+        let key = m.rule.rulesetId;
+        if (key === '_dynamic') {
+          const id = m.rule.ruleId;
+          if (id === ALLOWLIST_RULE_ID) continue;
+          key = id === RULE_AGGRESSIVE ? 'aggressive' : id === RULE_COOKIES ? 'cookies' : 'custom';
+        }
         counts[key] = (counts[key] || 0) + 1;
       }
     } catch { /* quota exceeded: fall back to the badge counter */ }
     if (tabId >= 0) badge = await chrome.action.getBadgeText({ tabId }).catch(() => '');
 
-    return { paused: state.paused, host, site, allowlisted, counts, badge,
+    const globals = normalizeGlobals(state.globalDefaults);
+    const shields = site ? {
+      effective: effective(site, globals, state.siteOverrides),
+      override: overrideFor(site, state.siteOverrides),
+    } : null;
+    return { paused: state.paused, host, site, allowlisted, counts, badge, globals, shields,
+             siteOverrides: state.siteOverrides,
              rulesets: meta.rulesets.map(r => ({ ...r, enabled: enabled.includes(r.id) })) };
+  },
+
+  /** value === null resets the site to the global default. */
+  async setSiteControl({ site, key, value }) {
+    const d = normalizeDomain(site);
+    if (!d) throw new Error('Not a website');
+    if (value !== null && !isValidControl(key, value)) throw new Error(`Invalid value for ${key}`);
+    const state = await getState();
+    await chrome.storage.local.set({ siteOverrides: setOverride(state.siteOverrides, d, key, value) });
+    await reconcile();
+    return { ok: true };
+  },
+
+  async resetSite({ site }) {
+    const d = normalizeDomain(site);
+    const state = await getState();
+    const next = { ...state.siteOverrides };
+    delete next[d];
+    await chrome.storage.local.set({ siteOverrides: next });
+    await reconcile();
+    return { ok: true };
+  },
+
+  async setGlobalDefault({ key, value }) {
+    if (!isValidControl(key, value)) throw new Error(`Invalid value for ${key}`);
+    const state = await getState();
+    await chrome.storage.local.set({ globalDefaults: { ...normalizeGlobals(state.globalDefaults), [key]: value } });
+    await reconcile();
+    return { ok: true };
+  },
+
+  async shredSite({ site }) {
+    const d = normalizeDomain(site);
+    if (!d) throw new Error('Not a website');
+    return { ok: true, origins: await shredSite(d) };
   },
 
   async setSiteAllowed({ site, allowed }) {

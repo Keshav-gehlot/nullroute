@@ -53,10 +53,12 @@ jobs:
         run: |
           pip install pytest playwright
           python -m playwright install --with-deps chromium
+      - name: Unit tests (per-site controls)
+        run: node --test extension/tests/shields.test.mjs
       - name: End-to-end tests
         run: python -m pytest extension/tests -v
       - name: Package
-        run: cd extension && zip -r ../nullroute-chrome.zip manifest.json src rulesets icons
+        run: cd extension && zip -r ../nullroute-chrome.zip manifest.json src rulesets icons -x 'src/**/*.test.*'
       - uses: actions/upload-artifact@v4
         with:
           name: nullroute-chrome
