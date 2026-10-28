@@ -1,0 +1,9 @@
+google.com www.google.com youtube.com www.youtube.com i.ytimg.com googlevideo.com gstatic.com
+fonts.googleapis.com play.google.com android.clients.google.com connectivitycheck.gstatic.com
+firebaseinstallations.googleapis.com apple.com icloud.com captive.apple.com
+whatsapp.com whatsapp.net web.whatsapp.com instagram.com facebook.com graph.facebook.com fbcdn.net
+microsoft.com login.microsoftonline.com office.com outlook.com github.com raw.githubusercontent.com
+amazon.com amazon.in flipkart.com paytm.com phonepe.com upi.npci.org.in netflix.com spotify.com
+api.spotify.com zoom.us slack.com discord.com twitter.com x.com reddit.com wikipedia.org
+cloudflare.com cdn.jsdelivr.net t.me telegram.org hotstar.com swiggy.com zomato.com irctc.co.in
+sbi.co.in hdfcbank.com icicibank.com linkedin.com openai.com claude.ai anthropic.com

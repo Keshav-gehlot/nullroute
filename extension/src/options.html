@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NullRoute settings</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="page">
+    <header class="masthead">
+      <img src="../icons/icon48.png" alt="" width="40" height="40">
+      <div>
+        <h1>NullRoute</h1>
+        <p>Blocking happens inside Chrome's own request engine. Nothing you browse is sent anywhere.</p>
+      </div>
+    </header>
+
+    <section aria-labelledby="listsTitle">
+      <h2 id="listsTitle">Filter lists</h2>
+      <p class="lede">Each list is compiled into Chrome rules when the extension is built. Turning one off takes effect immediately.</p>
+      <div id="lists" class="lists"></div>
+      <p class="meta" id="listsMeta"></p>
+    </section>
+
+    <section aria-labelledby="allowTitle">
+      <h2 id="allowTitle">Allowed sites</h2>
+      <p class="lede">Nothing is blocked or hidden on these sites or their subdomains. One per line.</p>
+      <textarea id="allowlist" rows="6" spellcheck="false" placeholder="example.com"></textarea>
+      <ul class="errors" id="allowErrors"></ul>
+    </section>
+
+    <section aria-labelledby="filtersTitle">
+      <h2 id="filtersTitle">My filters</h2>
+      <p class="lede">Add your own blocking rules. Elements you hide with the picker are saved here too.</p>
+      <textarea id="userFilters" rows="10" spellcheck="false" placeholder="! Lines starting with ! are comments"></textarea>
+      <details class="syntax">
+        <summary>Filter syntax</summary>
+        <table>
+          <tr><td><code>tracker.example.com</code></td><td>Block a domain and its subdomains</td></tr>
+          <tr><td><code>||example.com/ads/*</code></td><td>Block matching URLs (Adblock Plus syntax)</td></tr>
+          <tr><td><code>##.cookie-banner</code></td><td>Hide matching elements on every site</td></tr>
+          <tr><td><code>news.com##.promo</code></td><td>Hide matching elements on one site</td></tr>
+        </table>
+      </details>
+      <ul class="errors" id="filterErrors"></ul>
+    </section>
+
+    <div class="savebar">
+      <span id="saveStatus" role="status"></span>
+      <button class="btn primary" id="save">Save changes</button>
+    </div>
+
+    <footer class="credits">
+      <p>Filter lists: <a href="https://easylist.to" target="_blank" rel="noopener">EasyList &amp; EasyPrivacy</a> (GPLv3 / CC BY-SA 3.0),
+        <a href="https://github.com/StevenBlack/hosts" target="_blank" rel="noopener">StevenBlack hosts</a> (MIT).</p>
+      <p id="version"></p>
+    </footer>
+  </div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

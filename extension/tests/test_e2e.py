@@ -1,0 +1,296 @@
+"""End-to-end test: load the real extension into Chromium and browse a page
+that embeds real ad/tracker URLs.
+
+Every hostname is mapped to a local HTTP server with --host-resolver-rules,
+so the browser genuinely requests pagead2.googlesyndication.com etc. and
+the server records which requests actually made it out of the browser.
+
+    pip install pytest playwright && playwright install chromium
+    pytest extension/tests -v
+"""
+from __future__ import annotations
+
+import http.server
+import json
+import threading
+import time
+from pathlib import Path
+
+import pytest
+from playwright.sync_api import sync_playwright
+
+EXT = Path(__file__).resolve().parents[1]
+FIXTURES = Path(__file__).parent / "fixtures"
+PAGE = "http://news.test/page.html"
+AD_SCRIPT = "pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"
+ANALYTICS = "cdn.bgalytics.com/track.js"
+AD_PATH = "cdn.content.test/ads/get-ads-by-zones/"
+APP = "cdn.content.test/app.js"
+PIXEL = "ad.doubleclick.net/pixel.gif"
+
+
+class Recorder(http.server.BaseHTTPRequestHandler):
+    hits: list[str] = []
+    dynamic: bytes = b""
+
+    def do_GET(self):  # noqa: N802
+        host = self.headers.get("Host", "").split(":")[0]
+        Recorder.hits.append(f"{host}{self.path.split('?')[0]}")
+        if self.path.startswith("/dynamic.html"):
+            body, ctype = Recorder.dynamic, "text/html"
+        elif self.path.startswith("/page.html"):
+            body, ctype = (FIXTURES / "page.html").read_bytes(), "text/html"
+        elif self.path.endswith(".js"):
+            body = f"window.__loaded = (window.__loaded||[]).concat('{host}');".encode()
+            ctype = "application/javascript"
+        else:
+            body, ctype = b"GIF89a\x01\x00\x01\x00\x00\x00\x00;", "image/gif"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+@pytest.fixture(scope="module")
+def server():
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Recorder)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield srv.server_address[1]
+    srv.shutdown()
+
+
+@pytest.fixture(scope="module")
+def browser(server, tmp_path_factory):
+    with sync_playwright() as p:
+        ctx = p.chromium.launch_persistent_context(
+            str(tmp_path_factory.mktemp("profile")),
+            channel="chromium",
+            headless=True,
+            args=[
+                f"--disable-extensions-except={EXT}",
+                f"--load-extension={EXT}",
+                f"--host-resolver-rules=MAP * 127.0.0.1:{server}",
+            ],
+        )
+        sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker")
+        ext_id = sw.url.split("/")[2]
+        # Wait until onInstalled has reconciled settings into Chrome.
+        for _ in range(100):
+            if sw.evaluate("chrome.scripting.getRegisteredContentScripts().then(s => s.length)"):
+                break
+            time.sleep(0.1)
+        yield ctx, sw, ext_id
+        ctx.close()
+
+
+def visit(ctx, url=PAGE):
+    Recorder.hits.clear()
+    page = ctx.new_page()
+    page.goto(url, wait_until="load")
+    page.wait_for_timeout(600)  # let user-origin CSS land
+    return page
+
+
+def settings(ctx, ext_id, msg):
+    """Send a message to the service worker from an extension page, like the UI does."""
+    page = ctx.new_page()
+    page.goto(f"chrome-extension://{ext_id}/src/options.html")
+    res = page.evaluate("m => chrome.runtime.sendMessage(m)", msg)
+    page.close()
+    assert res["ok"], res
+    return res
+
+
+def test_rulesets_enabled(browser):
+    _, sw, _ = browser
+    enabled = sw.evaluate("chrome.declarativeNetRequest.getEnabledRulesets()")
+    assert sorted(enabled) == ["ads", "hosts", "privacy"]
+
+
+def test_blocks_ads_trackers_and_hosts(browser):
+    ctx, _, _ = browser
+    page = visit(ctx)
+    assert AD_SCRIPT not in Recorder.hits, "EasyList should block adsbygoogle.js"
+    assert ANALYTICS not in Recorder.hits, "EasyPrivacy should block analytics.js"
+    assert PIXEL not in Recorder.hits, "hosts list should block doubleclick"
+    assert AD_PATH not in Recorder.hits, "EasyList URL pattern should block on any domain"
+    assert APP in Recorder.hits, "first-party script must load"
+    assert page.evaluate("window.__loaded") == ["cdn.content.test"]
+    page.close()
+
+
+def test_generic_cosmetic_hiding(browser):
+    ctx, _, _ = browser
+    page = visit(ctx)
+    assert page.evaluate("getComputedStyle(document.getElementById('slot')).display") == "none"
+    assert page.evaluate("getComputedStyle(document.getElementById('story')).display") == "block"
+    page.close()
+
+
+def _pick_specific_rule():
+    """A real site-specific EasyList rule with a plain .class or #id selector."""
+    import re
+    cos = json.loads((EXT / "rulesets" / "cosmetic.json").read_text())
+    excluded = set(json.loads((EXT / "rulesets" / "generic-excluded.json").read_text()))
+    for domain, sels in cos["specific"].items():
+        if domain.count(".") != 1 or domain in excluded or domain in cos["exceptions"]:
+            continue
+        for s in sels:
+            if re.fullmatch(r"[.#][A-Za-z][\w-]{3,}", s) and s not in cos["generic"]:
+                return domain, s
+    raise AssertionError("no simple site-specific rule found")
+
+
+def test_site_specific_cosmetic_hiding(browser):
+    ctx, _, _ = browser
+    domain, selector = _pick_specific_rule()
+    attr = f'class="{selector[1:]}"' if selector[0] == "." else f'id="{selector[1:]}"'
+    Recorder.dynamic = (f'<!doctype html><div {attr}>ad</div>'
+                        f'<div id="control" class="nr-control">content</div>').encode()
+    display = f"getComputedStyle(document.querySelector({json.dumps(selector)})).display"
+    page = visit(ctx, f"http://{domain}/dynamic.html")
+    assert page.evaluate(display) == "none", (domain, selector)
+    assert page.evaluate("getComputedStyle(document.getElementById('control')).display") == "block"
+    page.close()
+    # Subdomains inherit the site's rules...
+    page = visit(ctx, f"http://www.{domain}/dynamic.html")
+    assert page.evaluate(display) == "none"
+    page.close()
+    # ...but the same markup on an unrelated site is untouched.
+    page = visit(ctx, "http://unrelated-site.test/dynamic.html")
+    assert page.evaluate(display) == "block"
+    page.close()
+
+
+def test_matched_rules_counted_per_list(browser):
+    ctx, sw, ext_id = browser
+    page = visit(ctx)
+    tab_id = sw.evaluate("chrome.tabs.query({url: 'http://news.test/*'}).then(t => t[t.length-1].id)")
+    # Chrome records matched rules asynchronously, so poll briefly.
+    for _ in range(20):
+        status = settings(ctx, ext_id, {"type": "getStatus", "tabId": tab_id, "url": PAGE})
+        if sum((status["counts"] or {}).values()) >= 4:
+            break
+        page.wait_for_timeout(250)
+    # A URL listed by several rulesets is attributed to just one of them, so
+    # check the lists that uniquely cover a fixture URL plus the total.
+    assert status["counts"].get("ads", 0) >= 1      # AD_PATH
+    assert status["counts"].get("privacy", 0) >= 1  # ANALYTICS
+    assert sum(status["counts"].values()) >= 4
+    assert status["allowlisted"] is False
+    page.close()
+
+
+def test_site_allowlist(browser):
+    ctx, _, ext_id = browser
+    settings(ctx, ext_id, {"type": "setSiteAllowed", "site": "news.test", "allowed": True})
+    try:
+        page = visit(ctx)
+        assert AD_SCRIPT in Recorder.hits and PIXEL in Recorder.hits
+        assert page.evaluate("getComputedStyle(document.getElementById('slot')).display") == "block"
+        page.close()
+    finally:
+        settings(ctx, ext_id, {"type": "setSiteAllowed", "site": "news.test", "allowed": False})
+    page = visit(ctx)
+    assert AD_SCRIPT not in Recorder.hits
+    page.close()
+
+
+def test_user_filters(browser):
+    ctx, _, ext_id = browser
+    res = settings(ctx, ext_id, {"type": "saveSettings", "allowlist": [],
+                                 "userFilters": "! mine\ncdn.content.test\nnews.test##article.content\nbad line ##{"})
+    assert res["counts"] == {"domains": 1, "patterns": 0, "selectors": 1}
+    assert len(res["errors"]) == 1
+    try:
+        page = visit(ctx)
+        assert APP not in Recorder.hits, "custom domain rule should block"
+        assert page.evaluate("getComputedStyle(document.getElementById('story')).display") == "none"
+        page.close()
+    finally:
+        settings(ctx, ext_id, {"type": "saveSettings", "allowlist": [], "userFilters": ""})
+
+
+def test_pause_everywhere(browser):
+    ctx, sw, ext_id = browser
+    settings(ctx, ext_id, {"type": "setPaused", "paused": True})
+    try:
+        assert sw.evaluate("chrome.declarativeNetRequest.getEnabledRulesets()") == []
+        page = visit(ctx)
+        assert AD_SCRIPT in Recorder.hits and ANALYTICS in Recorder.hits
+        page.close()
+    finally:
+        settings(ctx, ext_id, {"type": "setPaused", "paused": False})
+    page = visit(ctx)
+    assert AD_SCRIPT not in Recorder.hits
+    page.close()
+
+
+def test_toggle_single_list(browser):
+    ctx, sw, ext_id = browser
+    settings(ctx, ext_id, {"type": "setRulesetEnabled", "id": "privacy", "enabled": False})
+    try:
+        page = visit(ctx)
+        assert ANALYTICS in Recorder.hits, "privacy list off: tracker must load"
+        assert AD_PATH not in Recorder.hits, "other lists stay on"
+        page.close()
+    finally:
+        settings(ctx, ext_id, {"type": "setRulesetEnabled", "id": "privacy", "enabled": True})
+    assert "privacy" in sw.evaluate("chrome.declarativeNetRequest.getEnabledRulesets()")
+
+
+def test_element_picker(browser):
+    ctx, sw, ext_id = browser
+    page = visit(ctx)
+    tab_id = sw.evaluate("chrome.tabs.query({url: 'http://news.test/*'}).then(t => t[t.length-1].id)")
+    settings(ctx, ext_id, {"type": "startPicker", "tabId": tab_id})
+    page.wait_for_selector("nullroute-picker", state="attached")
+    box = page.locator("#story h1").bounding_box()
+    page.mouse.move(box["x"] + 5, box["y"] + 5)
+    page.mouse.click(box["x"] + 5, box["y"] + 5)
+    out = Path(__file__).parent / "screenshots"
+    out.mkdir(exist_ok=True)
+    page.screenshot(path=str(out / "picker.png"))
+    page.keyboard.press("Enter")
+    page.wait_for_selector("nullroute-picker", state="detached")
+    assert page.evaluate("getComputedStyle(document.querySelector('#story h1')).display") == "none"
+    assert page.evaluate("getComputedStyle(document.querySelector('#story p')).display") == "block"
+    saved = sw.evaluate("chrome.storage.local.get('userFilters').then(s => s.userFilters)")
+    assert saved.startswith("news.test##") and "h1" in saved
+    # Persisted: a fresh load of the site keeps it hidden.
+    page.close()
+    page = visit(ctx)
+    assert page.evaluate("getComputedStyle(document.querySelector('#story h1')).display") == "none"
+    page.close()
+    settings(ctx, ext_id, {"type": "saveSettings", "allowlist": [], "userFilters": ""})
+
+
+def test_ui_pages_render(browser, tmp_path):
+    ctx, sw, ext_id = browser
+    page = visit(ctx)
+    tab_id = sw.evaluate("chrome.tabs.query({url: 'http://news.test/*'}).then(t => t[t.length-1].id)")
+    errors = []
+    popup = ctx.new_page()
+    popup.on("pageerror", lambda e: errors.append(str(e)))
+    popup.set_viewport_size({"width": 340, "height": 480})
+    popup.goto(f"chrome-extension://{ext_id}/src/popup.html?tab={tab_id}")
+    popup.wait_for_function("document.querySelector('.popup').dataset.state === 'on'")
+    assert popup.inner_text("#host") == "news.test"
+    assert int(popup.inner_text("#count")) >= 3
+    out = Path(__file__).parent / "screenshots"
+    out.mkdir(exist_ok=True)
+    popup.screenshot(path=str(out / "popup.png"))
+    opts = ctx.new_page()
+    opts.on("pageerror", lambda e: errors.append(str(e)))
+    opts.goto(f"chrome-extension://{ext_id}/src/options.html")
+    opts.wait_for_selector(".list")
+    assert opts.locator(".list").count() == 3
+    opts.screenshot(path=str(out / "options.png"), full_page=True)
+    assert not errors, errors
+    for p in (page, popup, opts):
+        p.close()

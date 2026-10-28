@@ -1,0 +1,126 @@
+# XcodeGen spec — generate the Xcode project with:
+#   brew install xcodegen && cd ios && xcodegen generate && open NullRoute.xcodeproj
+#
+# Set DEVELOPMENT_TEAM below (or in Xcode) before running on a device.
+name: NullRoute
+options:
+  bundleIdPrefix: io.github.keshavgehlot
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: ""
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.9"
+    APP_GROUP: group.io.github.keshavgehlot.nullroute
+
+targets:
+  NullRoute:
+    type: application
+    platform: iOS
+    sources:
+      - path: NullRoute
+      - path: Shared
+    resources:
+      - path: Resources/Assets.xcassets
+    info:
+      path: Config/NullRoute-Info.plist
+      properties:
+        CFBundleDisplayName: NullRoute
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NullRouteAppGroup: $(APP_GROUP)
+        NullRouteListsBaseURL: https://raw.githubusercontent.com/Keshav-gehlot/nullroute/lists/
+    entitlements:
+      path: Config/NullRoute.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.keshavgehlot.nullroute
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleDisplayName: NullRoute
+    dependencies:
+      - target: BlockerAds
+      - target: BlockerPrivacy
+      - target: BlockerHosts
+      - target: BlockerCosmetic
+
+  # One Safari content blocker per list keeps each under WebKit's 150k-rule cap.
+  BlockerAds: &blocker
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ContentBlocker
+      - path: Shared/Blocker.swift
+      - path: ../dist/safari/ads.json
+        buildPhase: resources
+    info:
+      path: Config/Ads-Info.plist
+      properties: &blockerInfo
+        CFBundleDisplayName: NullRoute Ads
+        NullRouteBlockerID: ads
+        NullRouteAppGroup: $(APP_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.content-blocker
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ContentBlockerRequestHandler
+    entitlements: &blockerEntitlements
+      path: Config/ContentBlocker.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.keshavgehlot.nullroute.ads
+
+  BlockerPrivacy:
+    <<: *blocker
+    sources:
+      - path: ContentBlocker
+      - path: Shared/Blocker.swift
+      - path: ../dist/safari/privacy.json
+        buildPhase: resources
+    info:
+      path: Config/Privacy-Info.plist
+      properties:
+        <<: *blockerInfo
+        CFBundleDisplayName: NullRoute Trackers
+        NullRouteBlockerID: privacy
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.keshavgehlot.nullroute.privacy
+
+  BlockerHosts:
+    <<: *blocker
+    sources:
+      - path: ContentBlocker
+      - path: Shared/Blocker.swift
+      - path: ../dist/safari/hosts.json
+        buildPhase: resources
+    info:
+      path: Config/Hosts-Info.plist
+      properties:
+        <<: *blockerInfo
+        CFBundleDisplayName: NullRoute Bad Hosts
+        NullRouteBlockerID: hosts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.keshavgehlot.nullroute.hosts
+
+  BlockerCosmetic:
+    <<: *blocker
+    sources:
+      - path: ContentBlocker
+      - path: Shared/Blocker.swift
+      - path: ../dist/safari/cosmetic.json
+        buildPhase: resources
+    info:
+      path: Config/Cosmetic-Info.plist
+      properties:
+        <<: *blockerInfo
+        CFBundleDisplayName: NullRoute Element Hiding
+        NullRouteBlockerID: cosmetic
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.keshavgehlot.nullroute.cosmetic

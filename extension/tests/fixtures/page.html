@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NullRoute test page</title>
+  <!-- EasyList (ads ruleset): adsbygoogle loader -->
+  <script src="http://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+  <!-- EasyPrivacy (privacy ruleset): analytics tracker -->
+  <script src="http://cdn.bgalytics.com/track.js"></script>
+  <!-- First-party script that must always load -->
+  <script src="http://cdn.content.test/app.js"></script>
+</head>
+<body>
+  <article class="content" id="story"><h1>Real content</h1><p>This must stay visible.</p></article>
+  <!-- EasyList URL pattern on an otherwise allowed domain -->
+  <img id="zone" src="http://cdn.content.test/ads/get-ads-by-zones/?zones%5B%5D=1" width="1" height="1" alt="">
+  <!-- hosts ruleset -->
+  <img id="pixel" src="http://ad.doubleclick.net/pixel.gif" width="1" height="1" alt="">
+  <!-- generic cosmetic filter target -->
+  <ins class="adsbygoogle" id="slot" data-ad-client="ca-pub-0000000000000000" data-ad-slot="1" style="display:block;width:300px;height:250px;background:red"></ins>
+</body>
+</html>

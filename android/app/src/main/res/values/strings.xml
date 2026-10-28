@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NullRoute</string>
+    <string name="channel_status">Protection status</string>
+    <string name="channel_status_desc">Shows that NullRoute is filtering and how much it has blocked today.</string>
+    <string name="notif_title">NullRoute is blocking ads and trackers</string>
+    <plurals name="notif_blocked_today">
+        <item quantity="one">%d request blocked today</item>
+        <item quantity="other">%d requests blocked today</item>
+    </plurals>
+    <string name="action_turn_off">Turn off</string>
+    <string name="tile_on">On</string>
+    <string name="tile_off">Off</string>
+</resources>

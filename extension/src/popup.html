@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>NullRoute</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup" data-state="loading">
+    <header class="site">
+      <div class="site-text">
+        <h1 id="host">—</h1>
+        <p id="status" class="status" role="status">Checking this page…</p>
+      </div>
+      <label class="switch" title="Block ads and trackers on this site">
+        <input type="checkbox" id="siteToggle" aria-label="Block ads and trackers on this site">
+        <span class="track"></span>
+      </label>
+    </header>
+
+    <section class="tally" aria-labelledby="countLabel">
+      <p class="count"><span id="count">0</span></p>
+      <p id="countLabel" class="count-label">requests blocked on this tab</p>
+      <div class="bar" id="bar" aria-hidden="true"></div>
+      <ul class="legend" id="legend"></ul>
+    </section>
+
+    <section class="actions">
+      <button class="btn" id="picker">Hide an element on this page</button>
+      <label class="row">
+        <span>
+          <strong>Pause everywhere</strong>
+          <small>Turns off all blocking until you resume</small>
+        </span>
+        <span class="switch"><input type="checkbox" id="pauseToggle" aria-label="Pause everywhere"><span class="track"></span></span>
+      </label>
+    </section>
+
+    <footer>
+      <a href="#" id="openOptions">Lists, allowed sites and custom filters</a>
+      <p id="error" class="error" role="alert" hidden></p>
+    </footer>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

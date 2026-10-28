@@ -1,0 +1,35 @@
+.page { max-width: 720px; margin: 0 auto; padding: 40px 24px 96px; }
+.masthead { display: flex; gap: 16px; align-items: center; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.masthead h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+.masthead p { margin: 2px 0 0; color: var(--muted); max-width: 60ch; }
+section { padding: 28px 0 8px; }
+h2 { font-size: 17px; margin: 0 0 4px; letter-spacing: -.01em; }
+.lede { margin: 0 0 14px; color: var(--muted); max-width: 64ch; }
+.meta { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; }
+
+.lists { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.list { display: flex; align-items: center; gap: 16px; padding: 14px 16px; }
+.list + .list { border-top: 1px solid var(--line); }
+.list .name { flex: 1; }
+.list strong { display: block; }
+.list small { color: var(--muted); }
+.list .rules { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.list .err { display: block; color: var(--danger); font-size: 12.5px; }
+
+textarea { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 10px 12px; font: 13px/1.55 var(--mono); resize: vertical; }
+textarea:focus { border-color: var(--route); outline: none; box-shadow: 0 0 0 3px var(--route-soft); }
+
+.syntax { margin-top: 10px; font-size: 13px; }
+.syntax summary { cursor: pointer; color: var(--route); }
+.syntax table { border-collapse: collapse; margin-top: 8px; }
+.syntax td { padding: 5px 16px 5px 0; vertical-align: top; }
+.syntax code { font-family: var(--mono); font-size: 12.5px; background: var(--route-soft); padding: 1px 6px; border-radius: 4px; }
+
+.errors { list-style: none; padding: 0; margin: 8px 0 0; color: var(--danger); font-size: 12.5px; }
+
+.savebar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; align-items: center; gap: 14px;
+  padding: 14px 0; margin-top: 18px; background: var(--paper); border-top: 1px solid var(--line); }
+#saveStatus { color: var(--muted); font-size: 13px; }
+.credits { margin-top: 32px; color: var(--muted); font-size: 12.5px; }
+.credits a { color: inherit; }

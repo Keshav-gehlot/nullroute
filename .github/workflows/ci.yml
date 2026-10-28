@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lists:
+    name: Compile filter lists
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: |
+          pip install pytest playwright
+          python -m playwright install --with-deps chromium
+      - name: Compile EasyList / EasyPrivacy / hosts
+        working-directory: compiler
+        run: python -m nullroute_compiler --out ../dist --validate-selectors on
+      - name: Compiler tests
+        working-directory: compiler
+        run: python -m pytest -v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+
+  extension:
+    name: Chrome extension (e2e in Chromium)
+    needs: lists
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Build extension
+        run: node extension/scripts/build.mjs
+      - name: Install Playwright
+        run: |
+          pip install pytest playwright
+          python -m playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: python -m pytest extension/tests -v
+      - name: Package
+        run: cd extension && zip -r ../nullroute-chrome.zip manifest.json src rulesets icons
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nullroute-chrome
+          path: nullroute-chrome.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extension-screenshots
+          path: extension/tests/screenshots
+
+  android:
+    name: Android app
+    needs: lists
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests (packet + DNS engine)
+        working-directory: android
+        run: ./gradlew :core:test
+      - name: Lint and build APK
+        working-directory: android
+        run: ./gradlew :app:lintDebug :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nullroute-android-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+
+  ios:
+    name: iOS app (simulator build)
+    needs: lists
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - name: Generate Xcode project
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build
+        working-directory: ios
+        run: |
+          xcodebuild -project NullRoute.xcodeproj -scheme NullRoute \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO -quiet build

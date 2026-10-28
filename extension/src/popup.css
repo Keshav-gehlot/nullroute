@@ -1,0 +1,38 @@
+body { width: 340px; }
+.popup { display: flex; flex-direction: column; }
+
+.site { display: flex; align-items: center; gap: 14px; padding: 16px 16px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.site-text { flex: 1; min-width: 0; }
+.site h1 { font-size: 16px; font-weight: 650; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.01em; }
+.status { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+[data-state="on"] .status::before { background: var(--route); }
+[data-state="allowed"] .status::before,
+[data-state="paused"] .status::before { background: var(--signal); }
+
+.tally { padding: 18px 16px 14px; }
+.count { margin: 0; font-size: 46px; line-height: 1; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.count-label { margin: 6px 0 14px; color: var(--muted); font-size: 12.5px; }
+[data-state="paused"] .count, [data-state="allowed"] .count { color: var(--muted); }
+
+/* The route bar: each list gets a segment proportional to what it caught. */
+.bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); gap: 2px; }
+.bar span { display: block; height: 100%; min-width: 3px; transition: flex-grow .3s ease-out; }
+.legend { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: 12.5px; }
+.legend li { display: flex; align-items: center; gap: 7px; }
+.legend i { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.legend b { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.legend .off { color: var(--muted); }
+.legend .off b { font-weight: 400; }
+
+.actions { padding: 4px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+.actions .btn { width: 100%; text-align: center; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
+.row small { display: block; color: var(--muted); font-size: 12px; }
+[data-state="paused"] .row { border-color: var(--signal); background: var(--signal-soft); }
+
+footer { padding: 10px 16px 14px; border-top: 1px solid var(--line); }
+footer a { color: var(--route); text-decoration: none; font-size: 13px; }
+footer a:hover { text-decoration: underline; }
+.error { color: var(--danger); font-size: 12.5px; margin: 8px 0 0; }
