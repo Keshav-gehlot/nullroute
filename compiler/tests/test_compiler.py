@@ -255,3 +255,80 @@ def test_dist_chrome_rules_valid_and_within_budget():
         assert chrome.validate(rules) == []
         total += len(rules)
     assert total <= chrome.GUARANTEED_MINIMUM_STATIC_RULES
+
+
+# ---------------------------------------------------------------- research-driven additions
+from nullroute_compiler.abp import ScriptletFilter  # noqa: E402
+from nullroute_compiler.targets import params, scriptlets  # noqa: E402
+
+
+def test_ubo_party_aliases():
+    a, b, c = net("||t.com^$3p", "||u.com^$1p", "||v.com^$~3p")
+    assert a.party == "third" and b.party == "first" and c.party == "first"
+
+
+def test_scriptlet_parsing_aliases_args_and_escapes():
+    r = parse_abp([
+        "example.com##+js(aopr, adblockDetector)",
+        "news.com,~m.news.com##+js(set, ads.enabled, false)",
+        "video.com##+js(json-prune, playerResponse.adPlacements playerResponse.playerAds)",
+        "shop.com##+js(acs, document.createElement, /ad\\,block/)",
+        "x.com##+js(trusted-replace-xhr-response, a, b)",   # unsupported -> skipped
+        "##+js(aopr, foo)",                                  # generic -> skipped
+        "google.*##+js(aopr, foo)",                          # entity -> skipped
+        "blog.com#@#+js()",                                  # disable all on blog.com
+    ])
+    names = [(s.name, s.args) for s in r.scriptlets]
+    assert ("abort-on-property-read", ("adblockDetector",)) in names
+    assert ("set-constant", ("ads.enabled", "false")) in names
+    assert ("json-prune", ("playerResponse.adPlacements playerResponse.playerAds",)) in names
+    assert ("abort-current-script", ("document.createElement", "/ad,block/")) in names
+    assert r.skipped["scriptlet:unsupported"] == 1
+    assert r.skipped["scriptlet:generic"] == 1
+    assert r.skipped["scriptlet:wildcard-domain"] == 1
+    ir, stats = scriptlets.build(r.scriptlets)
+    assert ir["byDomain"]["news.com"] == [["set-constant", "ads.enabled", "false"]]
+    assert ir["disabled"]["m.news.com"] == ["set-constant|ads.enabled|false"]
+    assert ir["disabled"]["blog.com"] == ["*"]
+    assert stats["domains"] == 4
+
+
+def test_removeparam_and_click_id_rules():
+    r = parse_abp(["$removeparam=spm_id", "||shop.com^$removeparam=ref_src",
+                   "$removeparam=/^utm_/", "@@||bank.com^$removeparam"])
+    assert r.skipped["network:removeparam-complex"] == 1
+    rules, stats = params.build(r.network)
+    assert chrome.validate(rules) == []
+    global_params = {p for rl in rules if "regexFilter" in rl["condition"]
+                     for p in rl["action"]["redirect"]["transform"]["queryTransform"]["removeParams"]}
+    assert {"gclid", "fbclid", "msclkid", "spm_id"} <= global_params
+    assert not any(p.startswith("utm_") for p in global_params), "campaign tags are kept on purpose"
+    scoped = [rl for rl in rules if rl["condition"].get("urlFilter") == "||shop.com^"]
+    assert scoped[0]["action"]["redirect"]["transform"]["queryTransform"]["removeParams"] == ["ref_src"]
+    allow = [rl for rl in rules if rl["action"]["type"] == "allow"]
+    assert allow[0]["condition"] == {"urlFilter": "||bank.com^", "resourceTypes": ["main_frame"]}
+    # removeparam filters never become block rules anywhere
+    assert all(r2["action"]["type"] != "block" for r2 in chrome.to_dnr(r.network)[0])
+    assert safari.build_network(r.network)[0] == []
+
+
+@pytest.mark.parametrize("url,stripped", [
+    ("https://shop.com/item?id=7&gclid=abc", True),
+    ("https://shop.com/?fbclid=1", True),
+    ("https://shop.com/item?id=7&utm_source=x", False),
+    ("https://shop.com/item#gclid=1", False),
+    ("https://shop.com/agclid=1", False),
+])
+def test_click_id_regex_matches_like_re2(url, stripped):
+    rules, _ = params.build([])
+    hit = any(re.search(r["condition"]["regexFilter"], url) for r in rules if "regexFilter" in r["condition"])
+    assert hit is stripped
+
+
+@pytest.mark.skipif(not (DIST / "report.json").exists(), reason="run the compiler first")
+def test_dist_cname_targets_are_not_direct_blocks():
+    # The CNAME target list contains vendors' own sites; it must only be used for
+    # uncloaking, never merged into the direct DNS blocklist.
+    report = json.loads((DIST / "report.json").read_text())
+    assert report["dns"]["cname_targets"] > 50
+    assert (DIST / "dns/cname_targets.txt").exists()

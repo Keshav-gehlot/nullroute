@@ -80,8 +80,10 @@ def browser(server, tmp_path_factory):
         sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker")
         ext_id = sw.url.split("/")[2]
         # Wait until onInstalled has reconciled settings into Chrome.
-        for _ in range(100):
-            if sw.evaluate("chrome.scripting.getRegisteredContentScripts().then(s => s.length)"):
+        # Wait until onInstalled has finished reconciling: both the generic
+        # stylesheet and the MAIN-world scriptlets are registered last.
+        for _ in range(200):
+            if sw.evaluate("chrome.scripting.getRegisteredContentScripts().then(s => s.length)") >= 2:
                 break
             time.sleep(0.1)
         yield ctx, sw, ext_id
@@ -109,7 +111,7 @@ def settings(ctx, ext_id, msg):
 def test_rulesets_enabled(browser):
     _, sw, _ = browser
     enabled = sw.evaluate("chrome.declarativeNetRequest.getEnabledRulesets()")
-    assert sorted(enabled) == ["ads", "hosts", "privacy"]
+    assert sorted(enabled) == ["ads", "cname", "hosts", "params", "privacy", "ublock"]
 
 
 def test_blocks_ads_trackers_and_hosts(browser):
@@ -270,6 +272,78 @@ def test_element_picker(browser):
     settings(ctx, ext_id, {"type": "saveSettings", "allowlist": [], "userFilters": ""})
 
 
+# ---------------------------------------------------------------- research-driven features
+def _real_scriptlet(name, value=None):
+    import re
+    data = json.loads((EXT / "rulesets" / "scriptlets-main.js").read_text().rsplit("__nullrouteScriptlets(", 1)[1].rstrip(");\n"))
+    for domain, entries in data["byDomain"].items():
+        if domain.count(".") != 1 or domain in data["disabled"]:
+            continue
+        for e in entries:
+            if e[0] == name and re.fullmatch(r"[A-Za-z_$][\w$]*", e[1]) and (value is None or e[2:3] == [value]):
+                return domain, e
+    raise AssertionError(f"no simple {name} rule")
+
+
+def test_scriptlet_set_constant_runs_before_page_scripts(browser):
+    ctx, _, _ = browser
+    domain, (_, prop, value) = _real_scriptlet("set-constant", "false")
+    # The page sets the flag to true and reads it back; the scriptlet must win.
+    Recorder.dynamic = (f"<!doctype html><script>window.{prop} = true;"
+                        f"document.title = 'value:' + String(window.{prop});</script>").encode()
+    page = visit(ctx, f"http://{domain}/dynamic.html")
+    assert page.title() == "value:false", (domain, prop)
+    page.close()
+    page = visit(ctx, "http://unrelated-site.test/dynamic.html")
+    assert page.title() == "value:true", "scriptlets must only run on their own sites"
+    page.close()
+
+
+def test_scriptlet_abort_on_property_read(browser):
+    ctx, _, ext_id = browser
+    domain, (_, prop) = _real_scriptlet("abort-on-property-read")
+    Recorder.dynamic = (f"<!doctype html><script>try {{ window.{prop}; document.title = 'read-ok'; }}"
+                        f" catch (e) {{ document.title = 'aborted:' + e.name; }}</script>").encode()
+    page = visit(ctx, f"http://{domain}/dynamic.html")
+    assert page.title() == "aborted:ReferenceError", (domain, prop)
+    page.close()
+    # Allowlisting the site turns its scriptlets off too.
+    settings(ctx, ext_id, {"type": "setSiteAllowed", "site": domain, "allowed": True})
+    try:
+        page = visit(ctx, f"http://{domain}/dynamic.html")
+        assert page.title() == "read-ok"
+        page.close()
+    finally:
+        settings(ctx, ext_id, {"type": "setSiteAllowed", "site": domain, "allowed": False})
+
+
+def test_click_ids_stripped_campaign_tags_kept(browser):
+    ctx, _, _ = browser
+    page = visit(ctx, "http://news.test/page.html?id=7&gclid=TRACK123&utm_source=mail&fbclid=X9")
+    assert page.url == "http://news.test/page.html?id=7&utm_source=mail"
+    page.close()
+
+
+def test_cname_cloaked_tracker_blocked(browser):
+    ctx, _, _ = browser
+    rules = json.loads((EXT / "rulesets" / "rules_cname.json").read_text())
+    cloaked = next(d for r in rules for d in r["condition"].get("requestDomains", []) if d.count(".") >= 2)
+    Recorder.dynamic = f'<!doctype html><img src="http://{cloaked}/pixel.gif">'.encode()
+    page = visit(ctx, "http://unrelated-site.test/dynamic.html")
+    assert f"{cloaked}/pixel.gif" not in Recorder.hits, cloaked
+    page.close()
+
+
+def test_all_regex_rules_supported_by_chrome(browser):
+    _, sw, _ = browser
+    for f in (EXT / "rulesets").glob("rules_*.json"):
+        for r in json.loads(f.read_text()):
+            rx = r["condition"].get("regexFilter")
+            if rx:
+                res = sw.evaluate("rx => chrome.declarativeNetRequest.isRegexSupported({regex: rx})", rx)
+                assert res["isSupported"], (f.name, rx, res)
+
+
 def test_ui_pages_render(browser, tmp_path):
     ctx, sw, ext_id = browser
     page = visit(ctx)
@@ -289,7 +363,7 @@ def test_ui_pages_render(browser, tmp_path):
     opts.on("pageerror", lambda e: errors.append(str(e)))
     opts.goto(f"chrome-extension://{ext_id}/src/options.html")
     opts.wait_for_selector(".list")
-    assert opts.locator(".list").count() == 3
+    assert opts.locator(".list").count() == 6
     opts.screenshot(path=str(out / "options.png"), full_page=True)
     assert not errors, errors
     for p in (page, popup, opts):

@@ -1,11 +1,13 @@
 const $ = id => document.getElementById(id);
 const root = document.querySelector('.popup');
 
+// Each segment groups one or more rulesets (ids from rulesets.json).
 const SEGMENTS = [
-  { id: 'ads', label: 'Ads', color: 'var(--seg-ads)' },
-  { id: 'privacy', label: 'Trackers', color: 'var(--seg-privacy)' },
-  { id: 'hosts', label: 'Bad hosts', color: 'var(--seg-hosts)' },
-  { id: 'custom', label: 'My filters', color: 'var(--seg-custom)' },
+  { label: 'Ads', rulesets: ['ads', 'ublock'], color: 'var(--seg-ads)' },
+  { label: 'Trackers', rulesets: ['privacy', 'cname'], color: 'var(--seg-privacy)' },
+  { label: 'Bad hosts', rulesets: ['hosts'], color: 'var(--seg-hosts)' },
+  { label: 'Link tracking', rulesets: ['params'], color: 'var(--seg-params)' },
+  { label: 'My filters', rulesets: ['custom'], color: 'var(--seg-custom)' },
 ];
 
 let tab = null;
@@ -49,7 +51,7 @@ function render() {
   const legend = $('legend');
   legend.replaceChildren();
   for (const seg of SEGMENTS) {
-    const n = counts[seg.id] || 0;
+    const n = seg.rulesets.reduce((sum, id) => sum + (counts[id] || 0), 0);
     if (n > 0) {
       const span = document.createElement('span');
       span.style.background = seg.color;
@@ -58,7 +60,7 @@ function render() {
       bar.append(span);
     }
     const li = document.createElement('li');
-    const on = seg.id === 'custom' || enabled.has(seg.id);
+    const on = seg.rulesets.some(id => id === 'custom' || enabled.has(id));
     if (!on) li.className = 'off';
     const i = document.createElement('i');
     i.style.background = on ? seg.color : 'var(--line)';

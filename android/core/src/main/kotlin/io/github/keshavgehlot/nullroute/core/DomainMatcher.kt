@@ -8,6 +8,10 @@ enum class Verdict(val blocked: Boolean) {
     ALLOWED_BY_USER(false),
     BLOCKED_BY_LIST(true),
     BLOCKED_BY_USER(true),
+    /** The name looked harmless but its answer aliased (CNAME) to a tracker. */
+    BLOCKED_BY_CNAME(true),
+    /** use-application-dns.net: answered NXDOMAIN so Firefox keeps using system DNS. */
+    DOH_CANARY(false),
 }
 
 /**
@@ -22,6 +26,7 @@ class DomainMatcher(
     private val listAllowed: Set<String> = emptySet(),
     private val userBlocked: Set<String> = emptySet(),
     private val userAllowed: Set<String> = emptySet(),
+    private val cnameTargets: Set<String> = emptySet(),
 ) {
     val size: Int get() = listBlocked.size
 
@@ -35,7 +40,18 @@ class DomainMatcher(
     }
 
     fun withUserRules(blocked: Set<String>, allowed: Set<String>) =
-        DomainMatcher(listBlocked, listAllowed, blocked, allowed)
+        DomainMatcher(listBlocked, listAllowed, blocked, allowed, cnameTargets)
+
+    /**
+     * Should a lookup be blocked because its answer aliases to [target]?
+     * Uses the normal lists plus trackers known to hide behind CNAMEs, but a
+     * user or list allow rule for the target still wins.
+     */
+    fun blocksCnameTarget(target: String): Boolean {
+        val v = verdict(target)
+        if (v == Verdict.ALLOWED_BY_USER || v == Verdict.ALLOWED_BY_LIST) return false
+        return v.blocked || matches(target, cnameTargets)
+    }
 
     private fun matches(name: String, set: Set<String>): Boolean {
         if (set.isEmpty()) return false

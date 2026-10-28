@@ -41,11 +41,11 @@ IGNORED_OPTIONS = {"match-case"}  # handled separately; listed for clarity
 
 # Options that change semantics in ways we cannot reproduce on all targets.
 UNSUPPORTED_OPTIONS = {
-    "popup", "csp", "redirect", "redirect-rule", "removeparam", "queryprune",
+    "popup", "csp", "redirect", "redirect-rule", "queryprune",
     "rewrite", "header", "sitekey", "webrtc", "permissions", "replace",
     "cookie", "genericblock", "badfilter", "empty", "mp4", "inline-script",
     "inline-font", "urltransform", "uritransform", "method", "to", "from",
-    "strict1p", "strict3p", "1p", "3p", "first-party", "all", "ipaddress",
+    "strict1p", "strict3p", "all", "ipaddress",
     "requestheader", "responseheader", "stealth", "jsonprune", "hls",
     "urlskip", "reason", "ehide", "shide", "ghide", "doc",
 }
@@ -77,6 +77,7 @@ class NetworkFilter:
     document: bool = False             # @@...$document (allow whole page)
     elemhide: bool = False             # @@...$elemhide
     generichide: bool = False          # @@...$generichide
+    removeparam: str | None = None     # $removeparam=name (plain names only)
     source: str = ""
 
     @property
@@ -95,7 +96,7 @@ class NetworkFilter:
                     or self.include_domains or self.exclude_domains
                     or self.exclude_request_domains or self.match_case
                     or self.important or self.document or self.elemhide
-                    or self.generichide)
+                    or self.generichide or self.removeparam is not None)
 
 
 @dataclass(frozen=True)
@@ -112,10 +113,41 @@ class CosmeticFilter:
         return not self.include_domains
 
 
+# uBO scriptlet names and aliases -> canonical name. Only scriptlets that
+# NullRoute implements are accepted; everything else is skipped.
+SCRIPTLET_ALIASES = {
+    "abort-on-property-read": "abort-on-property-read", "aopr": "abort-on-property-read",
+    "abort-on-property-write": "abort-on-property-write", "aopw": "abort-on-property-write",
+    "abort-current-script": "abort-current-script", "acs": "abort-current-script",
+    "abort-current-inline-script": "abort-current-script", "acis": "abort-current-script",
+    "set-constant": "set-constant", "set": "set-constant",
+    "addEventListener-defuser": "addEventListener-defuser", "aeld": "addEventListener-defuser",
+    "no-setTimeout-if": "no-setTimeout-if", "nostif": "no-setTimeout-if",
+    "prevent-setTimeout": "no-setTimeout-if",
+    "no-setInterval-if": "no-setInterval-if", "nosiif": "no-setInterval-if",
+    "prevent-setInterval": "no-setInterval-if",
+    "no-window-open-if": "no-window-open-if", "nowoif": "no-window-open-if",
+    "prevent-window-open": "no-window-open-if",
+    "json-prune": "json-prune",
+}
+
+
+@dataclass(frozen=True)
+class ScriptletFilter:
+    """A ``domain##+js(name, args...)`` filter, run in the page's MAIN world."""
+    name: str                          # canonical scriptlet name
+    args: tuple[str, ...]
+    exception: bool = False
+    include_domains: frozenset[str] = frozenset()
+    exclude_domains: frozenset[str] = frozenset()
+    source: str = ""
+
+
 @dataclass
 class ParseResult:
     network: list[NetworkFilter] = field(default_factory=list)
     cosmetic: list[CosmeticFilter] = field(default_factory=list)
+    scriptlets: list[ScriptletFilter] = field(default_factory=list)
     hosts: set[str] = field(default_factory=set)
     skipped: Counter = field(default_factory=Counter)
     total_lines: int = 0
@@ -123,6 +155,7 @@ class ParseResult:
     def extend(self, other: "ParseResult") -> None:
         self.network.extend(other.network)
         self.cosmetic.extend(other.cosmetic)
+        self.scriptlets.extend(other.scriptlets)
         self.hosts |= other.hosts
         self.skipped.update(other.skipped)
         self.total_lines += other.total_lines
@@ -181,8 +214,11 @@ def _parse_cosmetic(line: str, res: ParseResult) -> None:
         res.skipped["cosmetic:extended"] += 1
         return
     domains_spec, selector = line[:idx], line[idx + len(marker):].strip()
-    if selector.startswith("+js(") or selector.startswith("^"):
-        res.skipped["cosmetic:scriptlet/html"] += 1
+    if selector.startswith("+js("):
+        _parse_scriptlet(domains_spec, selector, exception, line, res)
+        return
+    if selector.startswith("^"):
+        res.skipped["cosmetic:html-filter"] += 1
         return
     if not _is_safe_selector(selector):
         res.skipped["cosmetic:unsupported-selector"] += 1
@@ -197,6 +233,53 @@ def _parse_cosmetic(line: str, res: ParseResult) -> None:
         # everywhere; honour it by dropping the selector later.
         pass
     res.cosmetic.append(CosmeticFilter(selector, exception, inc, exc, line))
+
+
+def _split_scriptlet_args(body: str) -> list[str]:
+    """Split uBO scriptlet arguments: commas separate, "\\," is a literal comma."""
+    args, cur, i = [], [], 0
+    while i < len(body):
+        c = body[i]
+        if c == "\\" and i + 1 < len(body) and body[i + 1] == ",":
+            cur.append(","); i += 2; continue
+        if c == ",":
+            args.append("".join(cur).strip()); cur = []; i += 1; continue
+        cur.append(c); i += 1
+    args.append("".join(cur).strip())
+    # Quoted arguments ('foo' / "foo") keep their content verbatim.
+    return [a[1:-1] if len(a) >= 2 and a[0] == a[-1] and a[0] in "'\"`" else a for a in args]
+
+
+def _parse_scriptlet(domains_spec: str, selector: str, exception: bool, line: str, res: ParseResult) -> None:
+    if not selector.endswith(")"):
+        res.skipped["scriptlet:malformed"] += 1
+        return
+    body = selector[4:-1]
+    parsed = _split_domains(domains_spec, ",") if domains_spec else (frozenset(), frozenset())
+    if parsed is None:
+        res.skipped["scriptlet:wildcard-domain"] += 1
+        return
+    inc, exc = parsed
+    if exception and not body.strip():
+        # "example.com#@#+js()" turns off every scriptlet on that site.
+        if inc:
+            res.scriptlets.append(ScriptletFilter("*", (), True, inc, exc, line))
+        return
+    args = _split_scriptlet_args(body)
+    raw_name = args[0].removesuffix(".js")
+    name = SCRIPTLET_ALIASES.get(raw_name)
+    if not name:
+        res.skipped[f"scriptlet:unsupported"] += 1
+        return
+    if not inc and not exception:
+        # Generic scriptlets would run on every site; uBO forbids them too.
+        res.skipped["scriptlet:generic"] += 1
+        return
+    params = tuple(args[1:])
+    if len(params) > 6 or any(len(a) > 500 for a in params):
+        res.skipped["scriptlet:oversized"] += 1
+        return
+    res.scriptlets.append(ScriptletFilter(name, params, exception, inc, exc, line))
 
 
 # --------------------------------------------------------------------------
@@ -236,6 +319,7 @@ def _parse_network(line: str, res: ParseResult) -> None:
     exc_d: frozenset[str] = frozenset()
     deny: frozenset[str] = frozenset()
     important = match_case = document = elemhide = generichide = False
+    removeparam = None
 
     for opt in filter(None, (o.strip() for o in opts_str.split(","))):
         name, _, value = opt.partition("=")
@@ -244,8 +328,18 @@ def _parse_network(line: str, res: ParseResult) -> None:
         key = name_l[1:] if neg else name_l
         if key in RESOURCE_TYPES:
             (ex_rtypes if neg else rtypes).add(RESOURCE_TYPES[key])
-        elif key in ("third-party",):
+        elif key in ("third-party", "3p"):
             party = "first" if neg else "third"
+        elif key in ("first-party", "1p"):
+            party = "third" if neg else "first"
+        elif key == "removeparam" and not neg and exception and not value:
+            removeparam = ""  # "@@...$removeparam": stop stripping parameters on this site
+        elif key == "removeparam" and not neg:
+            # Only plain parameter names; regex/negated forms have no DNR equivalent.
+            if not re.fullmatch(r"[A-Za-z0-9_.\-\[\]]{1,64}", value or ""):
+                res.skipped["network:removeparam-complex"] += 1
+                return
+            removeparam = value
         elif key == "domain":
             parsed = _split_domains(value, "|")
             if parsed is None:
@@ -293,7 +387,7 @@ def _parse_network(line: str, res: ParseResult) -> None:
     if pattern in ("*", "|", "||"):
         pattern = ""
 
-    if not pattern and not (inc_d or document or elemhide or generichide):
+    if not pattern and not (inc_d or document or elemhide or generichide or removeparam):
         # A match-everything rule with no scope would block the whole web.
         res.skipped["network:unscoped-empty"] += 1
         return
@@ -315,6 +409,7 @@ def _parse_network(line: str, res: ParseResult) -> None:
         document=document,
         elemhide=elemhide,
         generichide=generichide,
+        removeparam=removeparam,
         source=line,
     ))
 

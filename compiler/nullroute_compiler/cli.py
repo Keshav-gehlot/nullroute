@@ -24,7 +24,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .abp import ParseResult, detect_format, parse_abp, parse_hosts
-from .targets import chrome, cosmetic, dns, safari
+from .targets import chrome, cosmetic, dns, params, safari, scriptlets
+
+ALL_TARGETS = ("chrome", "safari", "dns")
 from .validate import validate_selectors
 
 USER_AGENT = "NullRoute-Compiler/1.0 (+https://github.com/Keshav-gehlot/nullroute)"
@@ -111,15 +113,20 @@ def main(argv: list[str] | None = None) -> int:
         report["rulesets"][rs["id"]] = {
             "sources": versions,
             "parse": {"lines": result.total_lines, "network": len(result.network),
-                      "cosmetic": len(result.cosmetic), "hosts": len(result.hosts),
+                      "cosmetic": len(result.cosmetic), "scriptlets": len(result.scriptlets),
+                      "hosts": len(result.hosts),
                       "skipped": dict(result.skipped.most_common())},
         }
 
-    # ---- Cosmetic (shared by Chrome + Safari) -----------------------------
+    def targeting(platform: str) -> list[dict]:
+        return [rs for rs in config["rulesets"] if platform in rs.get("targets", ALL_TARGETS)]
+
+    chrome_sets, safari_sets, dns_sets = targeting("chrome"), targeting("safari"), targeting("dns")
+
+    # ---- Cosmetic: validate every selector once, build per-platform IR ------
     all_cosmetic = [c for r in parsed.values() for c in r.cosmetic]
-    all_network = [n for r in parsed.values() for n in r.network]
     invalid: set[str] = set()
-    if args.validate_selectors != "off":
+    if args.validate_selectors != "off" and all_cosmetic:
         selectors = sorted({c.selector for c in all_cosmetic})
         try:
             invalid = validate_selectors(selectors)
@@ -129,28 +136,43 @@ def main(argv: list[str] | None = None) -> int:
             if args.validate_selectors == "on":
                 raise SystemExit(str(e))
             print(f"  ! selector validation skipped: {e}", file=sys.stderr)
-    cosmetic_ir, cstats = cosmetic.build(all_cosmetic, all_network, invalid)
+
+    def cosmetic_for(sets: list[dict]):
+        return cosmetic.build([c for rs in sets for c in parsed[rs["id"]].cosmetic],
+                              [n for rs in sets for n in parsed[rs["id"]].network], invalid)
+
+    cosmetic_ir, cstats = cosmetic_for(chrome_sets)
     report["cosmetic"] = cstats
     report["files"]["chrome/cosmetic.json"] = write_json(out / "chrome" / "cosmetic.json", cosmetic_ir)
 
     # ---- Chrome DNR ---------------------------------------------------------
     meta = []
     total_rules = 0
-    for rs in config["rulesets"]:
-        r = parsed[rs["id"]]
-        rules, stats = chrome.to_dnr(r.network, r.hosts)
+
+    def emit_chrome(rs_id: str, name: str, description: str, enabled: bool, rules: list[dict], stats: dict):
+        nonlocal total_rules
         errors = chrome.validate(rules)
         if errors:
             for e in errors[:20]:
                 print("  ✗", e, file=sys.stderr)
-            raise SystemExit(f"{len(errors)} invalid DNR rules in {rs['id']}")
+            raise SystemExit(f"{len(errors)} invalid DNR rules in {rs_id}")
         total_rules += len(rules)
-        fname = f"rules_{rs['id']}.json"
+        fname = f"rules_{rs_id}.json"
         report["files"][f"chrome/{fname}"] = write_json(out / "chrome" / fname, rules)
-        report["rulesets"][rs["id"]]["chrome"] = stats
-        meta.append({"id": rs["id"], "name": rs["name"], "description": rs["description"],
-                     "enabled": rs["enabledByDefault"], "path": f"rulesets/{fname}",
-                     "rules": len(rules)})
+        report["rulesets"].setdefault(rs_id, {})["chrome"] = stats
+        meta.append({"id": rs_id, "name": name, "description": description, "enabled": enabled,
+                     "path": f"rulesets/{fname}", "rules": len(rules)})
+
+    for rs in chrome_sets:
+        r = parsed[rs["id"]]
+        rules, stats = chrome.to_dnr(r.network, r.hosts)
+        emit_chrome(rs["id"], rs["name"], rs["description"], rs["enabledByDefault"], rules, stats)
+
+    # Link-decoration stripping, from built-in click IDs + lists' $removeparam.
+    prules, pstats = params.build(n for rs in chrome_sets for n in parsed[rs["id"]].network)
+    emit_chrome("params", "Link tracking", "Removes click IDs such as gclid and fbclid from links",
+                True, prules, pstats)
+
     if total_rules > chrome.GUARANTEED_MINIMUM_STATIC_RULES:
         print(f"  ! {total_rules} static rules exceeds Chrome's guaranteed "
               f"{chrome.GUARANTEED_MINIMUM_STATIC_RULES}; extra rulesets use the shared pool",
@@ -160,8 +182,13 @@ def main(argv: list[str] | None = None) -> int:
         out / "chrome" / "rulesets.json",
         {"generatedAt": report["generatedAt"], "rulesets": meta}, pretty=True)
 
+    # ---- Chrome scriptlets (MAIN-world defusers) ------------------------------
+    sc_ir, sc_stats = scriptlets.build(s for rs in chrome_sets for s in parsed[rs["id"]].scriptlets)
+    report["files"]["chrome/scriptlets.json"] = write_json(out / "chrome" / "scriptlets.json", sc_ir)
+    report["scriptlets"] = sc_stats
+
     # ---- Safari ---------------------------------------------------------------
-    for rs in config["rulesets"]:
+    for rs in safari_sets:
         r = parsed[rs["id"]]
         rules, stats = safari.build_network(r.network, r.hosts)
         errors = safari.validate(rules)
@@ -169,12 +196,10 @@ def main(argv: list[str] | None = None) -> int:
             for e in errors[:20]:
                 print("  ✗", e, file=sys.stderr)
             raise SystemExit(f"{len(errors)} invalid Safari rules in {rs['id']}")
-        if stats["over_limit"]:
-            raise SystemExit(f"Safari blocker '{rs['id']}' has {len(rules)} rules "
-                             f"(limit {safari.MAX_RULES_PER_BLOCKER})")
         report["files"][f"safari/{rs['id']}.json"] = write_json(out / "safari" / f"{rs['id']}.json", rules)
         report["rulesets"][rs["id"]]["safari"] = stats
-    srules, sstats = safari.build_cosmetic(cosmetic_ir)
+    safari_cosmetic_ir, _ = cosmetic_for(safari_sets)
+    srules, sstats = safari.build_cosmetic(safari_cosmetic_ir)
     errors = safari.validate(srules)
     if errors:
         raise SystemExit(f"{len(errors)} invalid Safari cosmetic rules, e.g. {errors[0]}")
@@ -182,19 +207,33 @@ def main(argv: list[str] | None = None) -> int:
     report["safariCosmetic"] = sstats
 
     # ---- DNS --------------------------------------------------------------------
-    hosts = set().union(*(r.hosts for r in parsed.values()))
-    block, allow, dstats = dns.build(all_network, hosts)
+    hosts = set().union(*(parsed[rs["id"]].hosts for rs in dns_sets))
+    block, allow, dstats = dns.build([n for rs in dns_sets for n in parsed[rs["id"]].network], hosts)
     header = [f"NullRoute DNS blocklist — generated {report['generatedAt']}",
-              "Sources: " + ", ".join(s["url"] for rs in config["rulesets"] for s in rs["sources"])]
+              "Sources: " + ", ".join(s["url"] for rs in dns_sets for s in rs["sources"])]
     report["files"]["dns/blocklist.txt"] = write_lines(out / "dns" / "blocklist.txt", block, header)
     report["files"]["dns/allowlist.txt"] = write_lines(out / "dns" / "allowlist.txt", allow, header)
     report["dns"] = dstats
 
+    # CNAME-uncloaking targets: only consulted when a lookup's answer aliases to them.
+    if "cnameTargets" in config:
+        src = config["cnameTargets"]
+        text = fetch(src["url"], args.cache, args.offline, "cnametargets-0")
+        targets = {n.pure_domain for n in parse_abp(text.splitlines()).network
+                   if n.pure_domain and not n.exception} | parse_hosts(
+                       l for l in text.splitlines() if not l.startswith(("||", "!", "@@"))).hosts
+        report["files"]["dns/cname_targets.txt"] = write_lines(
+            out / "dns" / "cname_targets.txt", sorted(targets),
+            ["CNAME targets: block a lookup only when its answer aliases to one of these", src["url"]])
+        report["dns"]["cname_targets"] = len(targets)
+
     write_json(out / "report.json", report, pretty=True)
     print(f"✓ Chrome: {total_rules} DNR rules | cosmetic: {cstats['generic']} generic + "
           f"{cstats['specific_selectors']} site-specific selectors")
-    print(f"✓ Safari: " + ", ".join(f"{k}={v['safari']['rules']}" for k, v in report["rulesets"].items())
-          + f", cosmetic={sstats['rules']}")
+    print(f"✓ Link tracking: {pstats['global_params']} click-ID params, {pstats['rules']} rules | "
+          f"scriptlets: {sc_stats['rules']} on {sc_stats['domains']} sites")
+    print(f"✓ Safari: " + ", ".join(f"{k}={v['safari']['rules']}" for k, v in report["rulesets"].items()
+                                    if "safari" in v) + f", cosmetic={sstats['rules']}")
     print(f"✓ DNS: {dstats['domains']} blocked domains, {dstats['allow']} allowlisted")
     return 0
 

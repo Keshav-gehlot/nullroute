@@ -14,6 +14,7 @@
   --seg-privacy: #7c4dff;
   --seg-hosts: #0e9384;
   --seg-custom: #d4580a;
+  --seg-params: #a3127a;
   --radius-lg: 14px;
   --radius-sm: 8px;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -36,6 +37,7 @@
     --seg-privacy: #b39dff;
     --seg-hosts: #3cc9b6;
     --seg-custom: #ff9a5a;
+    --seg-params: #f27ad6;
   }
 }
 * { box-sizing: border-box; }

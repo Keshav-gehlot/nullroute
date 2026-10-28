@@ -130,6 +130,8 @@ def build_network(filters: Iterable[NetworkFilter], hosts: Iterable[str] = ()) -
     for f in filters:
         if (f.elemhide or f.generichide) and not f.document:
             continue
+        if f.removeparam is not None:
+            continue  # WebKit content blockers cannot rewrite URLs
         rules = _network_rule(f)
         if not rules:
             skipped += 1

@@ -19,7 +19,7 @@ val syncLists by tasks.registering(Copy::class) {
             )
         }
     }
-    from(listsDir) { include("blocklist.txt", "allowlist.txt") }
+    from(listsDir) { include("blocklist.txt", "allowlist.txt", "cname_targets.txt") }
     into(generatedAssets.map { it.dir("lists") })
 }
 

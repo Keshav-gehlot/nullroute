@@ -70,6 +70,9 @@ def to_dnr(filters: Iterable[NetworkFilter], hosts: Iterable[str] = ()) -> tuple
         if (f.elemhide or f.generichide) and not f.document:
             stats["cosmetic_only"] += 1
             continue  # handled by the cosmetic target
+        if f.removeparam is not None:
+            stats["removeparam"] += 1
+            continue  # handled by the params target
         action, priority, override = _action_and_priority(f)
         cond = _condition_key(f)
         cond.update(override)
@@ -114,6 +117,8 @@ def validate(rules: list[dict]) -> list[str]:
     """Static checks mirroring Chrome's ruleset loader. Returns error strings."""
     errors: list[str] = []
     seen_ids: set[int] = set()
+    if sum(1 for r in rules if "regexFilter" in r["condition"]) > MAX_NUMBER_OF_REGEX_RULES:
+        errors.append("too many regex rules")
     allowed_types = {"main_frame", "sub_frame", "stylesheet", "script", "image", "font",
                      "object", "xmlhttprequest", "ping", "csp_report", "media",
                      "websocket", "webtransport", "webbundle", "other"}
@@ -150,4 +155,12 @@ def validate(rules: list[dict]) -> list[str]:
                 errors.append(f"rule {rid}: allowAllRequests needs only frame types")
         if "urlFilter" in c and "regexFilter" in c:
             errors.append(f"rule {rid}: both urlFilter and regexFilter")
+        if "regexFilter" in c and len(c["regexFilter"]) > 1000:
+            errors.append(f"rule {rid}: regexFilter suspiciously long")
+        if r["action"]["type"] == "redirect":
+            red = r["action"].get("redirect", {})
+            if not (red.get("url") or red.get("extensionPath") or red.get("transform")):
+                errors.append(f"rule {rid}: redirect without target")
+        if r["action"]["type"] not in ("block", "allow", "allowAllRequests", "redirect", "upgradeScheme"):
+            errors.append(f"rule {rid}: unsupported action {r['action']['type']}")
     return errors

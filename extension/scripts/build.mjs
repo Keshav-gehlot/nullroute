@@ -53,6 +53,17 @@ for (let i = 0; i < sels.length; i += CHUNK) css += `${sels.slice(i, i + CHUNK).
 writeFileSync(join(out, 'generic.css'), css);
 writeFileSync(join(out, 'generic-excluded.json'), JSON.stringify([...excluded].sort()));
 
+// ---- scriptlets: one MAIN-world file = library + data -------------------------
+const scData = existsSync(join(src, 'scriptlets.json'))
+  ? JSON.parse(readFileSync(join(src, 'scriptlets.json'), 'utf8'))
+  : { byDomain: {}, disabled: {} };
+const scDomains = Object.keys(scData.byDomain).filter(d => DOMAIN_RE.test(d)).sort();
+const library = readFileSync(join(ext, 'src', 'scriptlets', 'library.js'), 'utf8');
+const scFile = `/* NullRoute scriptlets — generated, do not edit */\n${library}\n` +
+  `__nullrouteScriptlets(${JSON.stringify({ byDomain: scData.byDomain, disabled: scData.disabled })});\n`;
+writeFileSync(join(out, 'scriptlets-main.js'), scFile);
+writeFileSync(join(out, 'scriptlet-domains.json'), JSON.stringify(scDomains));
+
 // ---- manifest consistency ------------------------------------------------------
 const manifestPath = join(ext, 'manifest.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -76,3 +87,4 @@ for (const rr of manifest.declarative_net_request.rule_resources) {
 const total = meta.rulesets.reduce((a, r) => a + r.rules, 0);
 console.log(`✓ ${meta.rulesets.length} rulesets, ${total.toLocaleString()} DNR rules`);
 console.log(`✓ generic.css: ${sels.length.toLocaleString()} selectors (${(css.length / 1024).toFixed(0)} KB), ${excluded.size} domains excluded`);
+console.log(`✓ scriptlets: ${scDomains.length.toLocaleString()} sites (${(scFile.length / 1024).toFixed(0)} KB)`);

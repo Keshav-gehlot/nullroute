@@ -15,6 +15,8 @@ import { parseUserFilters } from './lib/userfilters.js';
 const ALLOWLIST_RULE_ID = 1;
 const USER_RULE_BASE = 1000;
 const GENERIC_SCRIPT_ID = 'nr-generic-css';
+const SCRIPTLET_SCRIPT_ID = 'nr-scriptlets';
+const SCRIPTLET_RULESET = 'ublock'; // scriptlets ship with the uBlock filters list
 const MENU_PICKER = 'nr-picker';
 
 const DEFAULTS = {
@@ -62,6 +64,7 @@ async function doReconcile() {
   await applyRulesets(state);
   await applyDynamicRules(state);
   await applyGenericStylesheet(state);
+  await applyScriptlets(state);
   await chrome.action.setBadgeBackgroundColor({ color: state.paused ? '#b7790a' : '#2f5bea' });
   await chrome.action.setTitle({ title: state.paused ? 'NullRoute (paused)' : 'NullRoute' });
 }
@@ -110,6 +113,30 @@ async function applyGenericStylesheet(state) {
     matches: ['http://*/*', 'https://*/*'],
     // One malformed pattern would make Chrome reject the whole registration.
     excludeMatches: [...excluded].filter(isValidDomain).map(matchPatternFor),
+    allFrames: true,
+    runAt: 'document_start',
+    persistAcrossSessions: true,
+  }]);
+}
+
+let scriptletDomainsCache = null;
+async function applyScriptlets(state) {
+  const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [SCRIPTLET_SCRIPT_ID] });
+  if (registered.length) await chrome.scripting.unregisterContentScripts({ ids: [SCRIPTLET_SCRIPT_ID] });
+  if (state.paused) return;
+  const enabled = await chrome.declarativeNetRequest.getEnabledRulesets();
+  if (!enabled.includes(SCRIPTLET_RULESET)) return;
+  scriptletDomainsCache ||= await fetch(chrome.runtime.getURL('rulesets/scriptlet-domains.json')).then(r => r.json());
+  const domains = scriptletDomainsCache.filter(isValidDomain);
+  if (!domains.length) return;
+  await chrome.scripting.registerContentScripts([{
+    id: SCRIPTLET_SCRIPT_ID,
+    js: ['rulesets/scriptlets-main.js'],
+    // MAIN world: shares window with the page, so it can trap properties
+    // before the page's own scripts run (document_start).
+    world: 'MAIN',
+    matches: domains.map(matchPatternFor),
+    excludeMatches: state.allowlist.filter(isValidDomain).map(matchPatternFor),
     allFrames: true,
     runAt: 'document_start',
     persistAcrossSessions: true,

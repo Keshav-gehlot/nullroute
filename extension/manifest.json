@@ -13,7 +13,9 @@
     "storage",
     "contextMenus"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "src/background.js",
     "type": "module"
@@ -36,9 +38,36 @@
   },
   "declarative_net_request": {
     "rule_resources": [
-      {"id": "ads", "enabled": true, "path": "rulesets/rules_ads.json"},
-      {"id": "privacy", "enabled": true, "path": "rulesets/rules_privacy.json"},
-      {"id": "hosts", "enabled": true, "path": "rulesets/rules_hosts.json"}
+      {
+        "id": "ads",
+        "enabled": true,
+        "path": "rulesets/rules_ads.json"
+      },
+      {
+        "id": "ublock",
+        "enabled": true,
+        "path": "rulesets/rules_ublock.json"
+      },
+      {
+        "id": "privacy",
+        "enabled": true,
+        "path": "rulesets/rules_privacy.json"
+      },
+      {
+        "id": "cname",
+        "enabled": true,
+        "path": "rulesets/rules_cname.json"
+      },
+      {
+        "id": "hosts",
+        "enabled": true,
+        "path": "rulesets/rules_hosts.json"
+      },
+      {
+        "id": "params",
+        "enabled": true,
+        "path": "rulesets/rules_params.json"
+      }
     ]
   },
   "web_accessible_resources": []

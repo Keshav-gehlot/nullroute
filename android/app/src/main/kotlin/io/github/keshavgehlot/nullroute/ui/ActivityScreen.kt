@@ -128,6 +128,12 @@ fun ActivityScreen(app: NullRouteApp, modifier: Modifier) {
                         Verdict.ALLOWED_BY_USER -> "Allowed by your own rule."
                         Verdict.ALLOWED_BY_LIST -> "Explicitly allowed by a filter list."
                         Verdict.ALLOWED -> "Not on any blocklist."
+                        Verdict.BLOCKED_BY_CNAME ->
+                            "This looks like part of the site, but it secretly points to the tracker " +
+                                "${e.cnameTarget ?: "a tracker"} (CNAME cloaking). Allow it if the site breaks."
+                        Verdict.DOH_CANARY ->
+                            "Firefox checks this name to decide whether to bypass system DNS. " +
+                                "NullRoute answers \"doesn't exist\" so Firefox stays filtered."
                     } + " Requested by ${app.apps.label(e.uid)}."
                 )
             },
@@ -153,6 +159,8 @@ fun ActivityScreen(app: NullRouteApp, modifier: Modifier) {
 
 private fun verdictLabel(v: Verdict) = when (v) {
     Verdict.BLOCKED_BY_LIST -> "Blocked"
+    Verdict.BLOCKED_BY_CNAME -> "Blocked (cloaked)"
+    Verdict.DOH_CANARY -> "DoH check"
     Verdict.BLOCKED_BY_USER -> "Blocked (you)"
     Verdict.ALLOWED_BY_USER -> "Allowed (you)"
     Verdict.ALLOWED_BY_LIST, Verdict.ALLOWED -> "Allowed"

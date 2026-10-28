@@ -28,17 +28,20 @@ class BlocklistRepository(private val context: Context, private val settings: Se
     private val mutex = Mutex()
     private var blocked: Set<String>? = null
     private var allowed: Set<String> = emptySet()
+    private var cnameTargets: Set<String> = emptySet()
 
     val domainCount: Int get() = blocked?.size ?: 0
 
     suspend fun matcher(): DomainMatcher = mutex.withLock {
         val b = blocked ?: load().also { blocked = it }
         val s = settings.current
-        DomainMatcher(b, allowed, s.userBlocked, s.userAllowed)
+        DomainMatcher(b, allowed, s.userBlocked, s.userAllowed, cnameTargets)
     }
 
     private suspend fun load(): Set<String> = withContext(Dispatchers.IO) {
         allowed = open("allowlist.txt")?.use { DomainMatcher.readList(it.bufferedReader()) } ?: emptySet()
+        // Trackers that hide behind CNAME aliases; consulted only for answers' CNAME targets.
+        cnameTargets = open("cname_targets.txt")?.use { DomainMatcher.readList(it.bufferedReader()) } ?: emptySet()
         open("blocklist.txt")?.use { DomainMatcher.readList(it.bufferedReader()) }
             ?: throw IOException("No blocklist bundled with the app")
     }
@@ -57,9 +60,9 @@ class BlocklistRepository(private val context: Context, private val settings: Se
         if (version == settings.current.listsVersion && File(dir, "blocklist.txt").exists()) {
             return@withContext UpdateResult(false, domainCount, version)
         }
-        for (name in listOf("blocklist.txt", "allowlist.txt")) {
+        for (name in listOf("blocklist.txt", "allowlist.txt", "cname_targets.txt")) {
+            val expected = files.optString("dns/$name").ifEmpty { null } ?: continue
             val bytes = fetch(base + name)
-            val expected = files.getString("dns/$name")
             val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
             if (!actual.equals(expected, ignoreCase = true)) throw IOException("Checksum mismatch for $name")
             val tmp = File(dir, "$name.tmp")
