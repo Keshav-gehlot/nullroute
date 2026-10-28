@@ -100,9 +100,9 @@ fun ActivityScreen(app: NullRouteApp, modifier: Modifier) {
                         )
                     }
                     Text(
-                        verdictLabel(e.verdict),
+                        if (e.suspicious) "Suspicious" else verdictLabel(e.verdict),
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (e.verdict.blocked) blockedColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (e.verdict.blocked || e.suspicious) blockedColor else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
@@ -131,10 +131,15 @@ fun ActivityScreen(app: NullRouteApp, modifier: Modifier) {
                         Verdict.BLOCKED_BY_CNAME ->
                             "This looks like part of the site, but it secretly points to the tracker " +
                                 "${e.cnameTarget ?: "a tracker"} (CNAME cloaking). Allow it if the site breaks."
+                        Verdict.BLOCKED_BY_HEURISTIC ->
+                            "This name is on no list, but it looks machine-generated — a pattern used by " +
+                                "malware and throwaway tracking domains. You turned on blocking for these."
                         Verdict.DOH_CANARY ->
                             "Firefox checks this name to decide whether to bypass system DNS. " +
                                 "NullRoute answers \"doesn't exist\" so Firefox stays filtered."
-                    } + " Requested by ${app.apps.label(e.uid)}."
+                    } + (if (e.suspicious) " Its name looks machine-generated, a pattern used by malware " +
+                        "and throwaway tracking domains, so it's worth a second look." else "") +
+                        " Requested by ${app.apps.label(e.uid)}."
                 )
             },
             confirmButton = {
@@ -161,6 +166,7 @@ private fun verdictLabel(v: Verdict) = when (v) {
     Verdict.BLOCKED_BY_LIST -> "Blocked"
     Verdict.BLOCKED_BY_CNAME -> "Blocked (cloaked)"
     Verdict.DOH_CANARY -> "DoH check"
+    Verdict.BLOCKED_BY_HEURISTIC -> "Blocked (generated)"
     Verdict.BLOCKED_BY_USER -> "Blocked (you)"
     Verdict.ALLOWED_BY_USER -> "Allowed (you)"
     Verdict.ALLOWED_BY_LIST, Verdict.ALLOWED -> "Allowed"

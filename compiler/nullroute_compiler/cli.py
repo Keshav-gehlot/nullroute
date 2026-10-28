@@ -227,6 +227,19 @@ def main(argv: list[str] | None = None) -> int:
             ["CNAME targets: block a lookup only when its answer aliases to one of these", src["url"]])
         report["dns"]["cname_targets"] = len(targets)
 
+    # DGA heuristic model (trained offline by `python -m nullroute_compiler.dga train`).
+    model_path = Path(__file__).resolve().parent.parent / "data" / "dga_model.json"
+    if model_path.exists():
+        m = json.loads(model_path.read_text())
+        lines = [f"{m['flagThreshold']} {m['blockThreshold']} {m['minLength']}", m["alphabet"],
+                 " ".join(m["dynamicDnsSuffixes"] + m["multiPartSuffixes"])]
+        lines += [" ".join(str(v) for v in m["model"][a]) for a in "^" + m["alphabet"]]
+        blob = ("\n".join(lines) + "\n").encode()
+        (out / "dns").mkdir(parents=True, exist_ok=True)
+        (out / "dns" / "dga_model.txt").write_bytes(blob)
+        report["files"]["dns/dga_model.txt"] = hashlib.sha256(blob).hexdigest()
+        report["dns"]["dga"] = {"flagThreshold": m["flagThreshold"], "blockThreshold": m["blockThreshold"]}
+
     write_json(out / "report.json", report, pretty=True)
     print(f"✓ Chrome: {total_rules} DNR rules | cosmetic: {cstats['generic']} generic + "
           f"{cstats['specific_selectors']} site-specific selectors")

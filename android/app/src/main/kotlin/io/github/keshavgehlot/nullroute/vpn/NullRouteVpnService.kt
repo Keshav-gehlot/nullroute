@@ -99,7 +99,10 @@ class NullRouteVpnService : VpnService() {
             app.settings.vpnWanted = true
             app.queryLog.clear()
             trackUnderlyingNetworks()
-            processor = DnsPacketProcessor(app.lists.matcher(), listOf(VIRTUAL_DNS_V4.address, VIRTUAL_DNS_V6.address))
+            processor = DnsPacketProcessor(
+                app.lists.matcher(), listOf(VIRTUAL_DNS_V4.address, VIRTUAL_DNS_V6.address),
+                dga = app.lists.dgaDetector(), blockSuspicious = app.settings.current.blockSuspicious,
+            )
             forwarder = DnsForwarder(
                 upstreams = ::upstreams,
                 openSocket = { DatagramSocket().also { protect(it) } },
@@ -202,6 +205,8 @@ class NullRouteVpnService : VpnService() {
     private suspend fun reloadRules() {
         try {
             processor?.matcher = app.lists.matcher()
+            processor?.dga = app.lists.dgaDetector()
+            processor?.blockSuspicious = app.settings.current.blockSuspicious
         } catch (e: Exception) {
             Log.e(TAG, "reload failed", e)
         }

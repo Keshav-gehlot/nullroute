@@ -12,6 +12,8 @@ enum class Verdict(val blocked: Boolean) {
     BLOCKED_BY_CNAME(true),
     /** use-application-dns.net: answered NXDOMAIN so Firefox keeps using system DNS. */
     DOH_CANARY(false),
+    /** On no list, but the name looks algorithmically generated (opt-in blocking). */
+    BLOCKED_BY_HEURISTIC(true),
 }
 
 /**

@@ -20,6 +20,7 @@ data class SettingsSnapshot(
     val userBlocked: Set<String>,
     val userAllowed: Set<String>,
     val autoUpdate: Boolean,
+    val blockSuspicious: Boolean,
     val listsUpdatedAt: Long,
     val listsVersion: String?,
 )
@@ -37,6 +38,7 @@ class Settings(context: Context) {
         userBlocked = prefs.getStringSet("user_blocked", emptySet())!!.toSet(),
         userAllowed = prefs.getStringSet("user_allowed", emptySet())!!.toSet(),
         autoUpdate = prefs.getBoolean("auto_update", true),
+        blockSuspicious = prefs.getBoolean("block_suspicious", false),
         listsUpdatedAt = prefs.getLong("lists_updated_at", 0L),
         listsVersion = prefs.getString("lists_version", null),
     )
@@ -48,6 +50,7 @@ class Settings(context: Context) {
 
     fun setUpstream(u: Upstream) = edit { putString("upstream", u.name) }
     fun setAutoUpdate(on: Boolean) = edit { putBoolean("auto_update", on) }
+    fun setBlockSuspicious(on: Boolean) = edit { putBoolean("block_suspicious", on) }
     fun setExcluded(pkg: String, excluded: Boolean) = edit {
         putStringSet("excluded_apps", current.excludedApps.toMutableSet().apply { if (excluded) add(pkg) else remove(pkg) })
     }

@@ -332,3 +332,59 @@ def test_dist_cname_targets_are_not_direct_blocks():
     report = json.loads((DIST / "report.json").read_text())
     assert report["dns"]["cname_targets"] > 50
     assert (DIST / "dns/cname_targets.txt").exists()
+
+
+# ---------------------------------------------------------------- zero-day heuristic (DGA)
+import math  # noqa: E402
+from collections import Counter  # noqa: E402
+
+from nullroute_compiler import dga  # noqa: E402
+
+MODEL = json.loads((Path(__file__).resolve().parents[1] / "data" / "dga_model.json").read_text())
+
+
+def _entropy(s):
+    c = Counter(s)
+    return -sum(v / len(s) * math.log2(v / len(s)) for v in c.values())
+
+
+def test_entropy_rule_cannot_fire_on_typical_dga_lengths():
+    # Shannon entropy of an n-char string is at most log2(n): a ">4.15" rule needs
+    # 18+ distinct characters, so it can never flag a 13-char DGA label.
+    assert _entropy("7x9qaz83mpr2v") <= math.log2(13) + 1e-12 < 4.15
+
+
+@pytest.mark.parametrize("domain,label", [
+    ("a.b.example.co.uk", "example"),
+    ("cvyh1po636avyrsxebwbkn7.ddns.net", "cvyh1po636avyrsxebwbkn7"),
+    ("d1a2b3c4e5f6.cloudfront.net", "cloudfront"),
+    ("srmist.edu.in", "srmist"),
+    ("localhost", None),
+])
+def test_site_label(domain, label):
+    assert dga.site_label(domain) == label
+
+
+def test_model_shape_and_thresholds():
+    assert MODEL["alphabet"] == dga.ALPHABET
+    assert len(MODEL["model"]) == len(dga.ALPHABET) + 1
+    assert all(len(row) == len(dga.ALPHABET) + 1 for row in MODEL["model"].values())
+    assert MODEL["blockThreshold"] < MODEL["flagThreshold"] < 0
+
+
+@pytest.mark.parametrize("domain,flagged", [
+    ("qzwxkjhvbn.net", True), ("7x9qaz83mpr2v.com", True), ("cvyh1po636avyrsxebwbkn7.ddns.net", True),
+    ("wikipedia.org", False), ("flipkart.com", False), ("instagram.com", False),
+    ("r4---sn-ab5l6nrz.googlevideo.com", False), ("d1a2b3c4e5f6.cloudfront.net", False),
+])
+def test_model_flags_generated_names_not_real_ones(domain, flagged):
+    label = dga.site_label(domain)
+    assert (dga.score(MODEL["model"], label) < MODEL["flagThreshold"]) is flagged
+
+
+@pytest.mark.skipif(not (DIST / "report.json").exists(), reason="run the compiler first")
+def test_dist_dga_model_text_matches_json():
+    lines = (DIST / "dns/dga_model.txt").read_text().splitlines()
+    flag, block, min_len = lines[0].split()
+    assert float(flag) == MODEL["flagThreshold"] and float(block) == MODEL["blockThreshold"]
+    assert lines[1] == MODEL["alphabet"] and len(lines) == 3 + len(MODEL["alphabet"]) + 1

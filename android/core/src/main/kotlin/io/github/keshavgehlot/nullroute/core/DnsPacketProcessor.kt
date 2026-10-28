@@ -43,6 +43,8 @@ data class QueryEvent(
     var verdict: Verdict,
     var uid: Int = -1,
     var cnameTarget: String? = null,
+    /** On no list, but looks machine-generated (shown as a warning; blocked only if opted in). */
+    var suspicious: Boolean = false,
 )
 
 /**
@@ -56,6 +58,8 @@ class DnsPacketProcessor(
     @Volatile var matcher: DomainMatcher,
     private val resolverAddresses: List<ByteArray>,
     private val clock: () -> Long = System::currentTimeMillis,
+    @Volatile var dga: DgaDetector? = null,
+    @Volatile var blockSuspicious: Boolean = false,
 ) {
     fun process(buf: ByteArray, length: Int): Decision {
         val pkt = UdpPacket.parse(buf, length) ?: return Decision.Drop
@@ -71,6 +75,17 @@ class DnsPacketProcessor(
         val m = matcher
         val verdict = m.verdict(query.name)
         val event = QueryEvent(clock(), query.name, query.type, verdict)
+        // Zero-day heuristic: only for names no list or user rule has decided.
+        if (verdict == Verdict.ALLOWED) {
+            when (dga?.assess(query.name)) {
+                DgaDetector.Level.BLOCK -> if (blockSuspicious) {
+                    event.verdict = Verdict.BLOCKED_BY_HEURISTIC
+                    return Decision.Respond(pkt.reply(query.blockedResponse()), pkt, event)
+                } else event.suspicious = true
+                DgaDetector.Level.FLAG -> event.suspicious = true
+                else -> Unit
+            }
+        }
         return if (verdict.blocked) {
             Decision.Respond(pkt.reply(query.blockedResponse()), pkt, event)
         } else {

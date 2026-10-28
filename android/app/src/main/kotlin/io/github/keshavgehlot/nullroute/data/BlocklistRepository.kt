@@ -2,6 +2,7 @@ package io.github.keshavgehlot.nullroute.data
 
 import android.content.Context
 import io.github.keshavgehlot.nullroute.BuildConfig
+import io.github.keshavgehlot.nullroute.core.DgaDetector
 import io.github.keshavgehlot.nullroute.core.DomainMatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -32,6 +33,15 @@ class BlocklistRepository(private val context: Context, private val settings: Se
 
     val domainCount: Int get() = blocked?.size ?: 0
 
+    private var dga: DgaDetector? = null
+
+    /** Heuristic for machine-generated names; null if the model is missing. */
+    suspend fun dgaDetector(): DgaDetector? = mutex.withLock {
+        dga ?: withContext(Dispatchers.IO) {
+            open("dga_model.txt")?.use { runCatching { DgaDetector.read(it.bufferedReader()) }.getOrNull() }
+        }.also { dga = it }
+    }
+
     suspend fun matcher(): DomainMatcher = mutex.withLock {
         val b = blocked ?: load().also { blocked = it }
         val s = settings.current
@@ -60,7 +70,7 @@ class BlocklistRepository(private val context: Context, private val settings: Se
         if (version == settings.current.listsVersion && File(dir, "blocklist.txt").exists()) {
             return@withContext UpdateResult(false, domainCount, version)
         }
-        for (name in listOf("blocklist.txt", "allowlist.txt", "cname_targets.txt")) {
+        for (name in listOf("blocklist.txt", "allowlist.txt", "cname_targets.txt", "dga_model.txt")) {
             val expected = files.optString("dns/$name").ifEmpty { null } ?: continue
             val bytes = fetch(base + name)
             val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
@@ -73,7 +83,7 @@ class BlocklistRepository(private val context: Context, private val settings: Se
             }
             if (!tmp.renameTo(File(dir, name))) throw IOException("Could not save $name")
         }
-        mutex.withLock { blocked = null }
+        mutex.withLock { blocked = null; dga = null }
         val count = matcher().size
         settings.setListsUpdated(System.currentTimeMillis(), version)
         UpdateResult(true, count, version)

@@ -102,6 +102,27 @@ private fun MainSettings(app: NullRouteApp, modifier: Modifier, open: (Page) -> 
         NavRow("Apps that skip NullRoute", "${s.excludedApps.size} excluded — use for apps that break") { open(Page.APPS) }
         NavRow("My blocked & allowed domains", "${s.userBlocked.size} blocked, ${s.userAllowed.size} allowed") { open(Page.RULES) }
 
+        Section("Unlisted domains")
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Block machine-generated-looking domains")
+                Text(
+                    "Catches some brand-new malware and tracker domains that aren't on any list yet. " +
+                        "About 1 in 700 normal sites may be blocked by mistake — tap it in Activity to allow it. " +
+                        "Suspicious names are always marked in Activity, even with this off.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = s.blockSuspicious, onCheckedChange = {
+                app.settings.setBlockSuspicious(it)
+                NullRouteVpnService.reload(context)
+            })
+        }
+
         Section("Filter lists")
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
