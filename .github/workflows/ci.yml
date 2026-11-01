@@ -89,13 +89,21 @@ jobs:
       - name: Unit tests (packet + DNS engine, reputation, TCP relay)
         working-directory: android
         run: ./gradlew :core:test
-      - name: Lint and build APK
+      - name: Build APK
         working-directory: android
-        run: ./gradlew :app:lintDebug :app:assembleDebug
+        run: ./gradlew :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: nullroute-android-debug
           path: android/app/build/outputs/apk/debug/*.apk
+      - name: Lint
+        working-directory: android
+        run: ./gradlew :app:lintDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-lint-report
+          path: android/app/build/reports/lint-results-debug.*
 
   ios:
     name: iOS app (simulator build)

@@ -11,10 +11,13 @@ val listsDir = rootProject.file("../dist/dns")
 val generatedAssets = layout.buildDirectory.dir("generated/lists")
 val syncLists by tasks.registering(Copy::class) {
     description = "Bundles the compiled DNS blocklist into the APK"
+    // Plain local values only: the configuration cache can't serialise script references.
+    val blocklist = listsDir.resolve("blocklist.txt")
+    val listsPath = listsDir.path
     doFirst {
-        if (!listsDir.resolve("blocklist.txt").exists()) {
+        if (!blocklist.exists()) {
             throw GradleException(
-                "No compiled blocklist at $listsDir. Run the compiler first:\n" +
+                "No compiled blocklist at $listsPath. Run the compiler first:\n" +
                     "  cd compiler && python -m nullroute_compiler --out ../dist"
             )
         }

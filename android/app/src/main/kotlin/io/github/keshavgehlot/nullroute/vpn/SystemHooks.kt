@@ -67,11 +67,15 @@ class ToggleTileService : TileService() {
                     android.app.PendingIntent.getActivity(this, 0, intent, android.app.PendingIntent.FLAG_IMMUTABLE)
                 )
             } else {
-                @Suppress("DEPRECATION")
-                startActivityAndCollapse(intent)
+                startActivityAndCollapseLegacy(intent)
             }
         }
     }
+
+    // Only reached below API 34, where the Intent overload is the supported one.
+    @android.annotation.SuppressLint("StartActivityAndCollapseDeprecated")
+    @Suppress("DEPRECATION")
+    private fun startActivityAndCollapseLegacy(intent: Intent) = startActivityAndCollapse(intent)
 
     private fun render(state: VpnState) {
         val tile = qsTile ?: return
