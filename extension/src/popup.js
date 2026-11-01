@@ -4,7 +4,7 @@ const root = document.querySelector('.popup');
 // Each segment groups one or more rulesets (ids from rulesets.json).
 const SEGMENTS = [
   { label: 'Ads', rulesets: ['ads', 'ublock', 'aggressive'], color: 'var(--seg-ads)' },
-  { label: 'Trackers', rulesets: ['privacy', 'cname', 'cookies'], color: 'var(--seg-privacy)' },
+  { label: 'Trackers', rulesets: ['privacy', 'cname', 'cookies', 'crosssite'], color: 'var(--seg-privacy)' },
   { label: 'Bad hosts', rulesets: ['hosts'], color: 'var(--seg-hosts)' },
   { label: 'Link tracking', rulesets: ['params'], color: 'var(--seg-params)' },
   { label: 'My filters', rulesets: ['custom'], color: 'var(--seg-custom)' },

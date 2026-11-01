@@ -56,6 +56,41 @@
       <ul class="overrides" id="overrides"></ul>
     </section>
 
+    <section aria-labelledby="repTitle">
+      <h2 id="repTitle">Dangerous sites</h2>
+      <p class="lede">Warns before opening sites on phishing, scam and malware feeds. Each address is checked against a list stored in Chrome; only a rare possible match downloads a small, anonymous batch of hashes to confirm, so the sites you visit are never sent anywhere.</p>
+      <div class="lists">
+        <div class="list">
+          <div class="name"><strong>Warn about dangerous sites</strong><small id="repMeta">Loading…</small></div>
+          <label class="switch"><input type="checkbox" id="repEnabled" aria-label="Warn about dangerous sites"><span class="track"></span></label>
+        </div>
+      </div>
+      <details class="syntax">
+        <summary>Update source</summary>
+        <p class="lede">Where compiled lists are downloaded from. Change it only if you host your own build.</p>
+        <input type="url" id="repBase" spellcheck="false" aria-label="List update source">
+        <button class="btn" id="repUpdate">Update now</button>
+        <span id="repStatus" role="status"></span>
+      </details>
+    </section>
+
+    <section aria-labelledby="xsiteTitle">
+      <h2 id="xsiteTitle">Cross-site trackers</h2>
+      <p class="lede">Catches trackers no list knows yet: a third party that receives the same identifier from two different sites is following you between them. Only scrambled fingerprints of those identifiers are kept, and they're forgotten when Chrome closes.</p>
+      <div class="lists">
+        <div class="list">
+          <div class="name"><strong>Detect cross-site trackers</strong><small>Watches requests the lists let through. Never blocks anything by itself.</small></div>
+          <label class="switch"><input type="checkbox" id="xsiteEnabled" aria-label="Detect cross-site trackers"><span class="track"></span></label>
+        </div>
+        <div class="list">
+          <div class="name"><strong>Block the trackers it finds</strong><small>Blocks them wherever they're embedded. Allowed sites are never affected.</small></div>
+          <label class="switch"><input type="checkbox" id="xsiteBlock" aria-label="Block detected cross-site trackers"><span class="track"></span></label>
+        </div>
+      </div>
+      <h3 class="subhead">Found so far</h3>
+      <ul class="overrides" id="xsiteList"></ul>
+    </section>
+
     <section aria-labelledby="allowTitle">
       <h2 id="allowTitle">Allowed sites</h2>
       <p class="lede">Nothing is blocked or hidden on these sites or their subdomains. One per line.</p>
@@ -86,7 +121,9 @@
 
     <footer class="credits">
       <p>Filter lists: <a href="https://easylist.to" target="_blank" rel="noopener">EasyList &amp; EasyPrivacy</a> (GPLv3 / CC BY-SA 3.0), <a href="https://github.com/uBlockOrigin/uAssets" target="_blank" rel="noopener">uBlock filters</a> (GPLv3), <a href="https://github.com/AdguardTeam/cname-trackers" target="_blank" rel="noopener">AdGuard CNAME trackers</a> (MIT),
-        <a href="https://github.com/StevenBlack/hosts" target="_blank" rel="noopener">StevenBlack hosts</a> (MIT).</p>
+        <a href="https://github.com/StevenBlack/hosts" target="_blank" rel="noopener">StevenBlack hosts</a> (MIT),
+        <a href="https://github.com/hagezi/dns-blocklists" target="_blank" rel="noopener">HaGeZi Threat Intelligence Feeds</a> (GPLv3),
+        <a href="https://github.com/mitchellkrogza/Phishing.Database" target="_blank" rel="noopener">Phishing.Database</a> (MIT).</p>
       <p id="version"></p>
     </footer>
   </div>

@@ -42,3 +42,9 @@ textarea:focus { border-color: var(--route); outline: none; box-shadow: 0 0 0 3p
 .overrides .what { flex: 1; color: var(--muted); font-size: 12.5px; }
 .overrides .empty { color: var(--muted); border: 0; }
 .link { background: none; border: 0; color: var(--route); cursor: pointer; padding: 0; font: inherit; }
+#repBase { width: 100%; box-sizing: border-box; background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 8px 10px; font: 13px var(--mono); margin: 0 0 8px; }
+#repBase:focus { border-color: var(--route); outline: none; box-shadow: 0 0 0 3px var(--route-soft); }
+#repStatus { margin-left: 8px; color: var(--muted); font-size: 13px; }
+#xsiteList li > span { flex: 1; color: var(--muted); font-size: 12.5px; word-break: break-word; }
+#xsiteList strong { color: var(--ink); font-family: var(--mono); font-size: 13px; }

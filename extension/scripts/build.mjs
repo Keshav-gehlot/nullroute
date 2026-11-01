@@ -6,6 +6,7 @@
 //   rulesets/rulesets.json         list metadata (copied)
 //   rulesets/cosmetic.json         element-hiding data (copied)
 //   rulesets/generic.css           generic hiding sheet, injected at document_start
+//   rulesets/rep-prefixes.rice     phishing/malware hash-prefix set (copied)
 //   rulesets/generic-excluded.json domains that must NOT get generic.css because
 //                                  they have exceptions or opted out of generic hiding
 //
@@ -30,6 +31,10 @@ const meta = JSON.parse(readFileSync(join(src, 'rulesets.json'), 'utf8'));
 for (const rs of meta.rulesets) copyFileSync(join(src, `rules_${rs.id}.json`), join(out, `rules_${rs.id}.json`));
 copyFileSync(join(src, 'rulesets.json'), join(out, 'rulesets.json'));
 copyFileSync(join(src, 'cosmetic.json'), join(out, 'cosmetic.json'));
+// Reputation prefix set (phishing/malware), refreshed at runtime from the lists branch.
+const rep = join(src, '..', 'rep', 'prefixes.rice');
+if (existsSync(rep)) copyFileSync(rep, join(out, 'rep-prefixes.rice'));
+else console.warn('! no dist/rep/prefixes.rice: dangerous-site warnings stay off until the first update');
 
 // ---- generic.css + exclusions ------------------------------------------------
 const cos = JSON.parse(readFileSync(join(src, 'cosmetic.json'), 'utf8'));

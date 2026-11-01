@@ -1,0 +1,64 @@
+{
+ "domains": 5012,
+ "positives": 919,
+ "negatives": 4093,
+ "negativesThatAreCdns": 0.983,
+ "experiments": [
+  {
+   "features": "behaviour",
+   "split": "random",
+   "rocAuc": 0.835,
+   "recallAt1PctFpr": 0.254,
+   "recallOnTrackersListsMiss": 0.105
+  },
+  {
+   "features": "behaviour",
+   "split": "by-company",
+   "rocAuc": 0.459,
+   "recallAt1PctFpr": 0.135,
+   "recallOnTrackersListsMiss": 0.033
+  },
+  {
+   "features": "behaviour+reach",
+   "split": "random",
+   "rocAuc": 0.873,
+   "recallAt1PctFpr": 0.304,
+   "recallOnTrackersListsMiss": 0.141
+  },
+  {
+   "features": "behaviour+reach",
+   "split": "by-company",
+   "rocAuc": 0.494,
+   "recallAt1PctFpr": 0.214,
+   "recallOnTrackersListsMiss": 0.067
+  },
+  {
+   "features": "names",
+   "split": "random",
+   "rocAuc": 0.821,
+   "recallAt1PctFpr": 0.157,
+   "recallOnTrackersListsMiss": 0.075
+  },
+  {
+   "features": "names",
+   "split": "by-company",
+   "rocAuc": 0.314,
+   "recallAt1PctFpr": 0.062,
+   "recallOnTrackersListsMiss": 0.011
+  },
+  {
+   "features": "behaviour+reach+names",
+   "split": "random",
+   "rocAuc": 0.904,
+   "recallAt1PctFpr": 0.424,
+   "recallOnTrackersListsMiss": 0.339
+  },
+  {
+   "features": "behaviour+reach+names",
+   "split": "by-company",
+   "rocAuc": 0.443,
+   "recallAt1PctFpr": 0.201,
+   "recallOnTrackersListsMiss": 0.053
+  }
+ ]
+}

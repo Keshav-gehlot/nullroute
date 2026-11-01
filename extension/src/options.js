@@ -157,3 +157,60 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 load().catch(e => { $('saveStatus').textContent = e.message; });
+
+// ---- dangerous sites -------------------------------------------------------------
+async function renderReputation() {
+  const r = await send({ type: 'getReputationStatus' });
+  $('repEnabled').checked = r.enabled;
+  $('repBase').value = r.listsBaseUrl;
+  const when = r.updatedAt ? `updated ${new Date(r.updatedAt).toLocaleDateString()}` : 'built-in list';
+  $('repMeta').textContent = `${r.prefixes.toLocaleString()} known dangerous domains · ${when}`;
+}
+$('repEnabled').addEventListener('change', async e => {
+  await send({ type: 'setReputationSettings', enabled: e.target.checked });
+});
+$('repUpdate').addEventListener('click', async () => {
+  $('repStatus').textContent = 'Updating…';
+  try {
+    await send({ type: 'setReputationSettings', listsBaseUrl: $('repBase').value });
+    const r = await send({ type: 'repUpdate' });
+    $('repStatus').textContent = r.changed ? 'Updated.' : 'Already up to date.';
+    renderReputation();
+  } catch (e) {
+    $('repStatus').textContent = e.message;
+  }
+});
+renderReputation();
+
+// ---- cross-site trackers ----------------------------------------------------------
+async function renderCrossSite() {
+  const r = await send({ type: 'getCrossSiteStatus' });
+  $('xsiteEnabled').checked = r.enabled;
+  $('xsiteBlock').checked = r.block;
+  const list = $('xsiteList');
+  list.replaceChildren();
+  const entries = Object.entries(r.flagged).sort((a, b) => b[1].at - a[1].at);
+  if (!entries.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'None yet.';
+    list.append(li);
+  }
+  for (const [domain, info] of entries) {
+    const li = document.createElement('li');
+    const text = document.createElement('span');
+    const strong = document.createElement('strong');
+    strong.textContent = domain;
+    text.append(strong, ` · same ID seen on ${info.sites.join(', ')}`);
+    const forget = document.createElement('button');
+    forget.className = 'btn';
+    forget.textContent = 'Forget';
+    forget.addEventListener('click', async () => { await send({ type: 'setCrossSiteSettings', forget: domain }); renderCrossSite(); });
+    li.append(text, forget);
+    list.append(li);
+  }
+}
+$('xsiteEnabled').addEventListener('change', e => send({ type: 'setCrossSiteSettings', enabled: e.target.checked }));
+$('xsiteBlock').addEventListener('change', e => send({ type: 'setCrossSiteSettings', block: e.target.checked }));
+renderCrossSite();
+

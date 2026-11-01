@@ -13,7 +13,9 @@
     "storage",
     "contextMenus",
     "browsingData",
-    "contentSettings"
+    "contentSettings",
+    "alarms",
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>"

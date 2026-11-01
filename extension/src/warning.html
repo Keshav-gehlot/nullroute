@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NullRoute — checking site</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="warning.css">
+</head>
+<body>
+  <main class="card" id="card" data-state="checking" aria-live="polite">
+    <img src="../icons/icon48.png" alt="" width="40" height="40">
+    <section class="checking">
+      <h1>Checking this site…</h1>
+      <p>Its address looks similar to a known dangerous site. NullRoute is confirming without sending the address anywhere.</p>
+    </section>
+    <section class="danger">
+      <h1>Dangerous site blocked</h1>
+      <p><strong id="host"></strong> is on a list of phishing, scam or malware sites<span id="match"></span>. It may try to steal your passwords or payment details, or install harmful software.</p>
+      <div class="actions">
+        <button class="btn primary" id="back">Back to safety</button>
+        <button class="btn link" id="proceed">I understand the risk, continue</button>
+      </div>
+      <p class="fine">Sources: HaGeZi Threat Intelligence Feeds and Phishing.Database, checked with a privacy-preserving hash lookup.</p>
+    </section>
+    <section class="error">
+      <h1>Couldn't check this site</h1>
+      <p id="error"></p>
+    </section>
+  </main>
+  <script type="module" src="warning.js"></script>
+</body>
+</html>

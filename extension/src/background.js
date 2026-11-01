@@ -7,22 +7,33 @@
 //     enabled lists) into dynamic DNR rules + content-script registrations
 //   * injects site-specific element-hiding CSS on navigation
 //   * runs the element picker
+//   * checks top-level navigations against the phishing/malware reputation
+//     data, locally first (see lib/reputation.js)
 
 import { CosmeticEngine } from './lib/cosmetic.js';
 import { hostOf, isValidDomain, matchesAny, matchPatternFor, normalizeDomain } from './lib/domains.js';
 import { parseUserFilters } from './lib/userfilters.js';
+import { decodePrefixes, Reputation } from './lib/reputation.js';
+import { CrossSiteDetector, extractIds, siteOf, TRACKING_TYPES } from './lib/xsite.js';
 import {
   buildShieldsRules, effective, fingerprintRegistration, isValidControl, normalizeGlobals,
   overrideFor, RULE_AGGRESSIVE, RULE_COOKIES, scriptSettings, setOverride, shredOrigins,
 } from './lib/shields.js';
 
 const ALLOWLIST_RULE_ID = 1;
+const XSITE_RULE_ID = 900;
 const USER_RULE_BASE = 1000;
 const GENERIC_SCRIPT_ID = 'nr-generic-css';
 const SCRIPTLET_SCRIPT_ID = 'nr-scriptlets';
 const SCRIPTLET_RULESET = 'ublock'; // scriptlets ship with the uBlock filters list
 const MENU_PICKER = 'nr-picker';
 const FARBLE_SCRIPT_ID = 'nr-farble';
+const REP_ALARM = 'nr-rep-update';
+const REP_CACHE = 'nullroute-rep';
+// Cache API keys must be http(s); this one is never fetched.
+const REP_CACHE_KEY = 'https://nullroute.invalid/rep/prefixes.rice';
+// The lists branch CI publishes compiled lists to (.github/workflows/lists.yml).
+export const LISTS_BASE_DEFAULT = 'https://raw.githubusercontent.com/Keshav-gehlot/nullroute/lists/';
 
 const DEFAULTS = {
   paused: false,
@@ -31,6 +42,11 @@ const DEFAULTS = {
   enabledRulesets: null,  // null = manifest defaults
   globalDefaults: {},     // shields defaults for every site (see lib/shields.js)
   siteOverrides: {},      // per-site shields overrides
+  phishingProtection: true, // warn before opening sites on phishing/malware feeds
+  crossSiteDetection: true, // spot unlisted third parties receiving one ID from several sites
+  blockCrossSite: false,    // ...and block them (opt-in)
+  xsiteFlagged: {},         // domain -> { sites, at }
+  listsBaseUrl: LISTS_BASE_DEFAULT,
 };
 
 // ---------------------------------------------------------------- state
@@ -103,6 +119,15 @@ async function applyDynamicRules(state) {
       });
     }
     addRules.push(...buildShieldsRules(state.globalDefaults, state.siteOverrides));
+    const xsite = Object.keys(state.xsiteFlagged).filter(isValidDomain);
+    if (state.blockCrossSite && xsite.length) {
+      addRules.push({
+        id: XSITE_RULE_ID,
+        priority: 1, // below every allow rule: allowlisted sites and list exceptions still win
+        action: { type: 'block' },
+        condition: { requestDomains: xsite, domainType: 'thirdParty' },
+      });
+    }
     const { rules } = parseUserFilters(state.userFilters);
     rules.forEach((r, i) => addRules.push({ id: USER_RULE_BASE + i, ...r }));
   }
@@ -259,6 +284,114 @@ chrome.tabs.onRemoved.addListener(tabId => {
   onTabClosed(tabId);
 });
 
+// ---------------------------------------------------------------- reputation
+// Bundled prefix set (rulesets/rep-prefixes.rice), replaced by a verified daily
+// download kept in the Cache API (too big for chrome.storage).
+let repPromise = null;
+function reputation() {
+  repPromise ||= loadReputation().catch(err => { repPromise = null; throw err; });
+  return repPromise;
+}
+
+async function loadReputation() {
+  const cached = await (await caches.open(REP_CACHE)).match(REP_CACHE_KEY);
+  const buf = cached ? await cached.arrayBuffer()
+    : await fetch(chrome.runtime.getURL('rulesets/rep-prefixes.rice')).then(r => r.arrayBuffer());
+  return new Reputation(decodePrefixes(buf), async name => {
+    const { listsBaseUrl } = await getState();
+    const r = await fetch(`${listsBaseUrl}rep/shards/${name}.bin`, { cache: 'no-store', credentials: 'omit' });
+    return r.ok ? r.arrayBuffer() : null;
+  });
+}
+
+const toHex = buf => Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+
+async function updateReputation() {
+  const { listsBaseUrl } = await getState();
+  const res = await fetch(`${listsBaseUrl}report.json`, { cache: 'no-store', credentials: 'omit' });
+  if (!res.ok) throw new Error(`report.json: HTTP ${res.status}`);
+  const expected = (await res.json()).files?.['rep/prefixes.rice'];
+  if (!expected) throw new Error('No reputation data in report.json');
+  const { repVersion } = await chrome.storage.local.get('repVersion');
+  if (repVersion === expected) return { changed: false };
+  const r = await fetch(`${listsBaseUrl}rep/prefixes.rice`, { cache: 'no-store', credentials: 'omit' });
+  if (!r.ok) throw new Error(`prefixes.rice: HTTP ${r.status}`);
+  const buf = await r.arrayBuffer();
+  if (toHex(await crypto.subtle.digest('SHA-256', buf)) !== expected) throw new Error('Checksum mismatch');
+  const count = decodePrefixes(buf).length;   // throws on a malformed file
+  await (await caches.open(REP_CACHE)).put(REP_CACHE_KEY, new Response(buf));
+  await chrome.storage.local.set({ repVersion: expected, repUpdatedAt: Date.now(), repCount: count });
+  repPromise = null;
+  return { changed: true, prefixes: count };
+}
+
+// Hosts the user already passed this session ('clean' after a check, or
+// 'proceed' after choosing to continue), so each is checked at most once.
+async function repPasses() {
+  return (await chrome.storage.session.get('repPass')).repPass || {};
+}
+async function setRepPass(host, value) {
+  const repPass = await repPasses();
+  repPass[host] = value;
+  await chrome.storage.session.set({ repPass });
+}
+
+async function guardNavigation(tabId, url) {
+  if (!/^https?:/i.test(url)) return;
+  const host = hostOf(url);
+  if (!host) return;
+  const state = await getState();
+  if (state.paused || !state.phishingProtection) return;
+  if (matchesAny(host, new Set(state.allowlist))) return;
+  if ((await repPasses())[host]) return;
+  const rep = await reputation();
+  // Purely local: SHA-256 of the host and its parents against the prefix set.
+  if (!(await rep.localHits(host)).length) return;
+  // Possible match: stop this navigation and confirm on the interstitial.
+  await chrome.tabs.update(tabId, { url: chrome.runtime.getURL(`src/warning.html?url=${encodeURIComponent(url)}`) });
+}
+
+chrome.webNavigation.onBeforeNavigate.addListener(({ tabId, frameId, url }) => {
+  if (tabId >= 0 && frameId === 0) guardNavigation(tabId, url).catch(e => console.warn('[NullRoute] reputation', e));
+});
+
+// ---------------------------------------------------------------- cross-site trackers
+// Requests that got past the lists are observed (never blocked or modified
+// here); see lib/xsite.js. Detector state lives in session storage only.
+let xsiteDetector = null;
+let xsiteChain = Promise.resolve();
+
+async function detector() {
+  if (!xsiteDetector) {
+    const { xsite } = await chrome.storage.session.get('xsite');
+    xsiteDetector = new CrossSiteDetector(xsite || { salt: crypto.randomUUID() });
+  }
+  return xsiteDetector;
+}
+
+async function observeRequest({ url, initiator, documentUrl, type, tabId }) {
+  if (tabId < 0 || !TRACKING_TYPES.has(type)) return;
+  const fpUrl = documentUrl || initiator || '';
+  const tp = siteOf(hostOf(url));
+  const fp = siteOf(hostOf(fpUrl));
+  if (!tp || !fp || tp === fp) return;
+  const ids = extractIds(url, fpUrl);
+  if (!ids.length) return;
+  const state = await getState();
+  if (state.paused || !state.crossSiteDetection || matchesAny(hostOf(fpUrl), new Set(state.allowlist))) return;
+  const det = await detector();
+  const flagged = await det.observe(tp, fp, ids);
+  await chrome.storage.session.set({ xsite: det.toJSON() });
+  if (flagged) {
+    await chrome.storage.local.set({ xsiteFlagged: { ...state.xsiteFlagged, [tp]: flagged } });
+    if (state.blockCrossSite) await reconcile();
+  }
+}
+
+chrome.webRequest.onBeforeRequest.addListener(details => {
+  xsiteChain = xsiteChain.then(() => observeRequest(details)).catch(e => console.warn('[NullRoute] xsite', e));
+}, { urls: ['http://*/*', 'https://*/*'] });
+
 // ---------------------------------------------------------------- element picker
 async function startPicker(tabId) {
   await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ['src/picker.js'] });
@@ -293,7 +426,8 @@ const handlers = {
         if (key === '_dynamic') {
           const id = m.rule.ruleId;
           if (id === ALLOWLIST_RULE_ID) continue;
-          key = id === RULE_AGGRESSIVE ? 'aggressive' : id === RULE_COOKIES ? 'cookies' : 'custom';
+          key = id === RULE_AGGRESSIVE ? 'aggressive' : id === RULE_COOKIES ? 'cookies'
+            : id === XSITE_RULE_ID ? 'crosssite' : 'custom';
         }
         counts[key] = (counts[key] || 0) + 1;
       }
@@ -416,6 +550,66 @@ const handlers = {
     return { ok: true, site };
   },
 
+  /** From the interstitial: full check (may fetch one shard). */
+  async repCheck({ url }) {
+    const host = hostOf(url);
+    if (!host) throw new Error('Not a website');
+    const result = await (await reputation()).check(host);
+    // 'unavailable' fails open: never strand the user because a shard didn't load.
+    if (result.verdict !== 'listed') await setRepPass(host, result.verdict);
+    return result;
+  },
+
+  async repProceed({ url }) {
+    const host = hostOf(url);
+    if (!host) throw new Error('Not a website');
+    await setRepPass(host, 'proceed');
+    return { ok: true };
+  },
+
+  async repUpdate() {
+    return updateReputation();
+  },
+
+  async getReputationStatus() {
+    const s = await getState();
+    const { repUpdatedAt = null } = await chrome.storage.local.get('repUpdatedAt');
+    const rep = await reputation().catch(() => null);
+    return { enabled: s.phishingProtection, listsBaseUrl: s.listsBaseUrl, prefixes: rep?.size ?? 0, updatedAt: repUpdatedAt };
+  },
+
+  async setReputationSettings({ enabled, listsBaseUrl }) {
+    const patch = {};
+    if (typeof enabled === 'boolean') patch.phishingProtection = enabled;
+    if (listsBaseUrl !== undefined) {
+      const u = String(listsBaseUrl || LISTS_BASE_DEFAULT).trim();
+      if (!/^https?:\/\/[^/]+\/.*\/$/.test(u)) throw new Error('List source must be an http(s) URL ending in /');
+      patch.listsBaseUrl = u;
+    }
+    await chrome.storage.local.set(patch);
+    return { ok: true };
+  },
+
+  async getCrossSiteStatus() {
+    const s = await getState();
+    return { enabled: s.crossSiteDetection, block: s.blockCrossSite, flagged: s.xsiteFlagged };
+  },
+
+  async setCrossSiteSettings({ enabled, block, forget }) {
+    const s = await getState();
+    const patch = {};
+    if (typeof enabled === 'boolean') patch.crossSiteDetection = enabled;
+    if (typeof block === 'boolean') patch.blockCrossSite = block;
+    if (forget) {
+      const next = { ...s.xsiteFlagged };
+      delete next[forget];
+      patch.xsiteFlagged = next;
+    }
+    await chrome.storage.local.set(patch);
+    await reconcile();
+    return { ok: true };
+  },
+
   async getAvailableRuleCount() {
     return { available: await chrome.declarativeNetRequest.getAvailableStaticRuleCount() };
   },
@@ -437,10 +631,18 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
     chrome.contextMenus.create({ id: MENU_PICKER, title: 'Block an element…', contexts: ['page', 'image', 'frame', 'link'] });
   });
   await reconcile();
+  chrome.alarms.create(REP_ALARM, { delayInMinutes: 5, periodInMinutes: 24 * 60 });
   if (reason === 'install') chrome.runtime.openOptionsPage();
 });
 
-chrome.runtime.onStartup.addListener(() => reconcile());
+chrome.runtime.onStartup.addListener(() => {
+  reconcile();
+  chrome.alarms.create(REP_ALARM, { delayInMinutes: 5, periodInMinutes: 24 * 60 });
+});
+
+chrome.alarms.onAlarm.addListener(({ name }) => {
+  if (name === REP_ALARM) updateReputation().catch(e => console.warn('[NullRoute] reputation update failed', e));
+});
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === MENU_PICKER && tab?.id >= 0) startPicker(tab.id).catch(() => {});

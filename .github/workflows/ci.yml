@@ -32,7 +32,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: dist
+          # The raw phishing feed is kept so later jobs can test against real entries.
+          path: |
+            dist
+            compiler/.cache/rep-1.txt
+          include-hidden-files: true   # .cache is a dot-directory
           retention-days: 7
 
   extension:
@@ -42,7 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        with: { name: dist, path: dist }
+        with: { name: dist, path: . }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: actions/setup-python@v5
@@ -53,8 +57,8 @@ jobs:
         run: |
           pip install pytest playwright
           python -m playwright install --with-deps chromium
-      - name: Unit tests (per-site controls)
-        run: node --test extension/tests/shields.test.mjs
+      - name: Unit tests (per-site controls, reputation, cross-site detector)
+        run: node --test extension/tests/*.test.mjs
       - name: End-to-end tests
         run: python -m pytest extension/tests -v
       - name: Package
@@ -76,13 +80,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        with: { name: dist, path: dist }
+        with: { name: dist, path: . }
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      - name: Unit tests (packet + DNS engine)
+      - name: Unit tests (packet + DNS engine, reputation, TCP relay)
         working-directory: android
         run: ./gradlew :core:test
       - name: Lint and build APK
@@ -100,7 +104,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        with: { name: dist, path: dist }
+        with: { name: dist, path: . }
       - name: Generate Xcode project
         working-directory: ios
         run: |

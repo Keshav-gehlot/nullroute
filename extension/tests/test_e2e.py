@@ -35,11 +35,19 @@ class Recorder(http.server.BaseHTTPRequestHandler):
     hits: list[str] = []
     cookies: dict[str, str] = {}   # "host/path" -> Cookie header received
     dynamic: bytes = b""
+    files: dict[str, bytes] = {}   # served verbatim for host lists.test (list updates)
 
     def do_GET(self):  # noqa: N802
         host = self.headers.get("Host", "").split(":")[0]
         Recorder.hits.append(f"{host}{self.path.split('?')[0]}")
         Recorder.cookies[f"{host}{self.path.split('?')[0]}"] = self.headers.get("Cookie", "")
+        if host == "lists.test":
+            body = Recorder.files.get(self.path.split("?")[0])
+            self.send_response(200 if body is not None else 404)
+            self.send_header("Content-Length", str(len(body or b"")))
+            self.end_headers()
+            self.wfile.write(body or b"")
+            return
         if self.path.startswith("/dynamic.html"):
             body, ctype = Recorder.dynamic, "text/html"
         elif self.path.startswith("/page.html"):
@@ -524,3 +532,99 @@ def test_ui_pages_render(browser, tmp_path):
     assert not errors, errors
     for p in (page, popup, opts):
         p.close()
+
+
+def test_dangerous_site_interstitial_with_private_lookup(browser, tmp_path):
+    """Reputation end to end: verified list update, local prefix check, shard
+    confirmation, warning page, proceed, and a clean prefix collision."""
+    import hashlib
+    import re
+    import sys
+    sys.path.insert(0, str(EXT.parent / "compiler"))
+    from nullroute_compiler import reputation as rep
+
+    ctx, _, ext_id = browser
+    rep.build(["phish-login.test", "evil-bank.test"], tmp_path)
+    prefixes = rep.rice_decode((tmp_path / "rep/prefixes.rice").read_bytes())
+    # A clean host whose 32-bit prefix collides locally: the shard must clear it.
+    prefixes = sorted(set(prefixes) | {rep.prefix32(rep.digest("collides.test"))})
+    blob = rep.rice_encode(prefixes)
+    files = {"/lists/rep/prefixes.rice": blob,
+             "/lists/report.json": json.dumps({"files": {"rep/prefixes.rice": hashlib.sha256(blob).hexdigest()}}).encode()}
+    for f in (tmp_path / "rep/shards").iterdir():
+        files[f"/lists/rep/shards/{f.name}"] = f.read_bytes()
+    Recorder.files = files
+
+    settings(ctx, ext_id, {"type": "setReputationSettings", "listsBaseUrl": "http://lists.test/lists/"})
+    Recorder.files = {**files, "/lists/report.json": b'{"files": {"rep/prefixes.rice": "' + b"0" * 64 + b'"}}'}
+    bad = ctx.new_page()
+    bad.goto(f"chrome-extension://{ext_id}/src/options.html")
+    res = bad.evaluate("m => chrome.runtime.sendMessage(m)", {"type": "repUpdate"})
+    assert not res["ok"] and "Checksum" in res["error"], "a tampered download must be refused"
+    bad.close()
+    Recorder.files = files
+    assert settings(ctx, ext_id, {"type": "repUpdate"})["changed"]
+
+    page = ctx.new_page()
+    page.goto("http://news.test/page.html")
+    Recorder.hits.clear()
+    try:
+        page.goto("http://www.phish-login.test/signin")
+    except Exception:  # the navigation is replaced by the interstitial
+        pass
+    page.wait_for_url(re.compile(r"chrome-extension://.*/src/warning\.html"), timeout=10000)
+    page.wait_for_selector('#card[data-state="danger"]', timeout=10000)
+    assert "phish-login.test" in page.inner_text("#host")
+    lookups = [h for h in Recorder.hits if h.startswith("lists.test")]
+    assert lookups and all(re.fullmatch(r"lists\.test/lists/rep/shards/[0-9a-f]{3}\.bin", h) for h in lookups), \
+        f"only an anonymous 12-bit bucket may be requested, got {lookups}"
+    page.click("#proceed")
+    page.wait_for_url("http://www.phish-login.test/signin", timeout=10000)
+
+    Recorder.hits.clear()
+    try:
+        page.goto("http://collides.test/page.html")
+    except Exception:  # briefly interrupted by the "checking" interstitial
+        pass
+    page.wait_for_url("http://collides.test/page.html", timeout=10000)
+    assert sum(h.startswith("lists.test/lists/rep/shards/") for h in Recorder.hits) == 1
+    assert "collides.test/page.html" in Recorder.hits
+
+    Recorder.hits.clear()
+    page.goto("http://plain-site.test/page.html")
+    assert not [h for h in Recorder.hits if h.startswith("lists.test")], "a clean site must not contact the server"
+    page.close()
+
+
+
+def test_cross_site_tracker_detected_then_blocked(browser):
+    """An unlisted third party receiving one ID from two sites is flagged; blocking is opt-in."""
+    ctx, _, ext_id = browser
+    pixel = "http://edge.unlisted-tracker.test/v1/img?uid=a8f3c2d1e9b74f60&cb=1730419200000"
+    Recorder.dynamic = f'<html><body><img src="{pixel}"></body></html>'.encode()
+    settings(ctx, ext_id, {"type": "setCrossSiteSettings", "enabled": True, "block": False})
+    for site in ("first-site.test", "second-site.test"):
+        page = visit(ctx, f"http://{site}/dynamic.html")
+        page.close()
+    assert "edge.unlisted-tracker.test/v1/img" in Recorder.hits, "detection alone must never block"
+    status = settings(ctx, ext_id, {"type": "getCrossSiteStatus"})
+    for _ in range(30):
+        if "unlisted-tracker.test" in status["flagged"]:
+            break
+        time.sleep(0.2)
+        status = settings(ctx, ext_id, {"type": "getCrossSiteStatus"})
+    assert sorted(status["flagged"]["unlisted-tracker.test"]["sites"]) == ["first-site.test", "second-site.test"]
+
+    # A benign third party whose IDs differ per site is never flagged.
+    Recorder.dynamic = b'<html><body><img src="http://widgets.benign.test/v1/img?session=FIRSTk2m9x7q3w8"></body></html>'
+    visit(ctx, "http://first-site.test/dynamic.html").close()
+    Recorder.dynamic = b'<html><body><img src="http://widgets.benign.test/v1/img?session=SECONDp4z6r1t5y0"></body></html>'
+    visit(ctx, "http://second-site.test/dynamic.html").close()
+    assert "benign.test" not in settings(ctx, ext_id, {"type": "getCrossSiteStatus"})["flagged"]
+
+    settings(ctx, ext_id, {"type": "setCrossSiteSettings", "block": True})
+    Recorder.dynamic = f'<html><body><img src="{pixel}"></body></html>'.encode()
+    page = visit(ctx, "http://third-site.test/dynamic.html")
+    assert "edge.unlisted-tracker.test/v1/img" not in Recorder.hits
+    page.close()
+    settings(ctx, ext_id, {"type": "setCrossSiteSettings", "block": False, "forget": "unlisted-tracker.test"})
