@@ -25,6 +25,7 @@ targets:
       - path: Shared
     resources:
       - path: Resources/Assets.xcassets
+      - path: Resources/antinag.js
     info:
       path: Config/NullRoute-Info.plist
       properties:

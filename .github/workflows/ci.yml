@@ -106,7 +106,7 @@ jobs:
           path: android/app/build/reports/lint-results-debug.*
 
   ios:
-    name: iOS app (simulator build)
+    name: iOS app (simulator + unsigned device build)
     needs: lists
     runs-on: macos-15
     steps:
@@ -124,3 +124,16 @@ jobs:
           xcodebuild -project NullRoute.xcodeproj -scheme NullRoute \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO -quiet build
+      - name: Unsigned device build (IPA for sideloading)
+        working-directory: ios
+        run: |
+          xcodebuild -project NullRoute.xcodeproj -scheme NullRoute -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -quiet build
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/NullRoute.app Payload/
+          zip -qry ../NullRoute-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nullroute-ios-unsigned-ipa
+          path: NullRoute-unsigned.ipa

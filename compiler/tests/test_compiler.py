@@ -509,3 +509,17 @@ def test_dist_compat_hosts_are_loaders_only():
     assert "fundingchoicesmessages.google.com" in blocked
     # every entry is actually blocked today (otherwise it is dead weight)
     assert all(any(p in blocked for p in parents(c)) for c in compat)
+
+
+@pytest.mark.skipif(not (DIST / "safari/ads.json").exists(), reason="run the compiler first")
+def test_dist_safari_lets_ad_loaders_through_last():
+    compat = [l.strip() for l in (DIST / "dns/compat.txt").read_text().splitlines() if l.strip() and not l.startswith("#")]
+    for name in ("ads", "privacy", "hosts"):
+        rules = json.loads((DIST / f"safari/{name}.json").read_text())
+        tail = rules[-len(compat):]
+        assert all(r["action"]["type"] == "ignore-previous-rules" for r in tail), name
+        for host in compat:
+            url = f"https://{host}/js/x.js"
+            assert any(re.search(r["trigger"]["url-filter"], url) for r in tail), (name, host)
+        # A sibling ad server is NOT let through.
+        assert not any(re.search(r["trigger"]["url-filter"], "https://tpc.googlesyndication.com/x") for r in tail)

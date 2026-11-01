@@ -210,10 +210,20 @@ def main(argv: list[str] | None = None) -> int:
     report["files"]["chrome/scriptlets.json"] = write_json(out / "chrome" / "scriptlets.json", sc_ir)
     report["scriptlets"] = sc_stats
 
+    # Ad loader hosts that ad-blocker detectors probe (compiler/data/antiadblock-compat.txt).
+    compat_path = Path(__file__).resolve().parent.parent / "data" / "antiadblock-compat.txt"
+    compat = sorted({l.split("#", 1)[0].strip().lower() for l in compat_path.read_text().splitlines()} - {""}) \
+        if compat_path.exists() else []
+    # Safari can't serve stand-in scripts, so like the Android app it lets just these
+    # loaders through (ignore-previous-rules, appended last); ad servers stay blocked.
+    safari_compat = [{"trigger": {"url-filter": "^https?://" + re.escape(h).replace("\\-", "-") + "[:/]"},
+                      "action": {"type": "ignore-previous-rules"}} for h in compat]
+
     # ---- Safari ---------------------------------------------------------------
     for rs in safari_sets:
         r = parsed[rs["id"]]
         rules, stats = safari.build_network(r.network, r.hosts)
+        rules += safari_compat
         errors = safari.validate(rules)
         if errors:
             for e in errors[:20]:
@@ -251,9 +261,7 @@ def main(argv: list[str] | None = None) -> int:
         report["dns"]["cname_targets"] = len(targets)
 
     # Ad-blocker detection compatibility hosts (Android "Avoid ad-blocker detection").
-    compat_path = Path(__file__).resolve().parent.parent / "data" / "antiadblock-compat.txt"
-    if compat_path.exists():
-        compat = sorted({l.split("#", 1)[0].strip().lower() for l in compat_path.read_text().splitlines()} - {""})
+    if compat:
         report["files"]["dns/compat.txt"] = write_lines(
             out / "dns" / "compat.txt", compat,
             ["Loader hosts unblocked to avoid ad-blocker detection; see compiler/data/antiadblock-compat.txt"])

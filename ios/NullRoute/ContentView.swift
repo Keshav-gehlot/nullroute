@@ -7,9 +7,14 @@ struct NullRouteApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(manager)
-                .tint(Color("Route"))
+            TabView {
+                ContentView()
+                    .tabItem { Label("Protection", systemImage: "shield.lefthalf.filled") }
+                BrowserView()
+                    .tabItem { Label("Browse", systemImage: "globe") }
+            }
+            .environmentObject(manager)
+            .tint(Color("Route"))
         }
         .onChange(of: scenePhase) { phase in
             // Users enable blockers in Settings, then come back here.
