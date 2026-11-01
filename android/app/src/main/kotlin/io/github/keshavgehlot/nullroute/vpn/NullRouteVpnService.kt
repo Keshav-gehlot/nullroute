@@ -296,10 +296,10 @@ class NullRouteVpnService : VpnService() {
     // ---- foreground notification & stats -----------------------------------
     private fun goForeground() {
         val notification = buildNotification()
-        // Android 14+ requires a type; VPN apps qualify for systemExempted once the
-        // VPN is configured, with specialUse as a fallback on stricter builds.
+        // Android 14+ requires a type. specialUse (declared with its subtype in the
+        // manifest) is valid for an on-device filtering VPN without extra permissions.
         val types = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            listOf(ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            listOf(ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else listOf(0)
         for (type in types) {
             try {
