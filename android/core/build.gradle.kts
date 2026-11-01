@@ -4,8 +4,17 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
 }
 
+// Target Java 17 bytecode (same as the app) but build with whatever JDK runs
+// Gradle (17+), so Android Studio's bundled JBR works without a separate JDK 17.
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
 kotlin {
-    jvmToolchain(17)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 dependencies {
