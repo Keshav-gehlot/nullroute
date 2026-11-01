@@ -55,7 +55,10 @@
   // ------------------------------------------------------------ selector generation
   const cssEscape = s => (window.CSS && CSS.escape ? CSS.escape(s) : s.replace(/[^a-zA-Z0-9_-]/g, '\\$&'));
   // Class/id names that look auto-generated (hashes, CSS-in-JS) change on every build.
-  const looksRandom = s => /\d{3,}|[a-z]+-[a-zA-Z0-9]{5,}$|^[a-zA-Z0-9_-]{12,}$|^(css|sc|jsx|emotion)-/.test(s);
+  // Also catches short per-load names such as "epgr3ltl0n" / "giqad39tt": digits wedged
+  // between letters, or long consonant runs, which real class names almost never have.
+  const looksRandom = s => /\d{3,}|[a-z]+-(?=[a-zA-Z0-9]*[A-Z0-9])[a-zA-Z0-9]{5,}$|^(?=[a-zA-Z0-9_-]*[A-Z0-9])[a-zA-Z0-9_-]{12,}$|^(css|sc|jsx|emotion)-/.test(s) ||
+    (s.length >= 6 && /^[a-z0-9]+$/i.test(s) && (/[a-z]\d+[a-z]/i.test(s) || /[bcdfghjklmnpqrstvwxz]{6,}/i.test(s)));
 
   function isUnique(sel) {
     try { return document.querySelectorAll(sel).length === 1; } catch { return false; }

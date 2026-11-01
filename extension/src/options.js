@@ -214,3 +214,7 @@ $('xsiteEnabled').addEventListener('change', e => send({ type: 'setCrossSiteSett
 $('xsiteBlock').addEventListener('change', e => send({ type: 'setCrossSiteSettings', block: e.target.checked }));
 renderCrossSite();
 
+// ---- ad-blocker walls --------------------------------------------------------------
+chrome.storage.local.get('antiNag', ({ antiNag }) => { $('antiNag').checked = antiNag !== false; });
+$('antiNag').addEventListener('change', e => chrome.storage.local.set({ antiNag: e.target.checked }));
+

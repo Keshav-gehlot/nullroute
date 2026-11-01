@@ -74,5 +74,17 @@
       }
     ]
   },
-  "web_accessible_resources": []
+  "web_accessible_resources": [],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "src/antinag.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

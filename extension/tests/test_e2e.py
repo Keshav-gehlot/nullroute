@@ -667,3 +667,31 @@ def test_cross_site_tracker_detected_then_blocked(browser):
     assert "edge.unlisted-tracker.test/v1/img" not in Recorder.hits
     page.close()
     settings(ctx, ext_id, {"type": "setCrossSiteSettings", "block": False, "forget": "unlisted-tracker.test"})
+
+
+def test_ad_blocker_wall_removed_by_message_not_name(browser):
+    """A 'disable your ad blocker' wall with random per-load names is removed and the page
+    unlocked; an ordinary newsletter modal on the same page is left alone."""
+    ctx, _, _ = browser
+    Recorder.dynamic = b"""<!doctype html><html><body style="overflow:hidden">
+      <main style="filter:blur(4px)"><p>Article text</p></main>
+      <div id="qz8kd7fbr" style="position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9998"></div>
+      <span id="epgr3ltl0n" class="giqad39tt" style="position:fixed;inset:5%;z-index:9999;background:#fff">
+        <b>Ad blocker detected</b> Please disable your ad blocker to continue watching.</span>
+      <div id="newsletter" style="position:fixed;inset:20%;z-index:5000;background:#eee">Subscribe to our newsletter</div>
+      <script>setTimeout(() => document.body.insertAdjacentHTML('beforeend',
+        '<div id="late' + Math.random().toString(36).slice(2) + '" style="position:fixed;inset:0;z-index:10000;background:#fff">Turn off your AdBlock and refresh</div>'), 1500)</script>
+    </body></html>"""
+    page = visit(ctx, "http://walls.test/dynamic.html")
+    page.wait_for_timeout(2500)
+    state = page.evaluate("""() => ({
+      nag: !!document.getElementById('epgr3ltl0n'),
+      backdrop: !!document.getElementById('qz8kd7fbr'),
+      late: [...document.querySelectorAll('[id^=late]')].length,
+      newsletter: !!document.getElementById('newsletter'),
+      overflow: getComputedStyle(document.body).overflow,
+      blur: getComputedStyle(document.querySelector('main')).filter,
+    })""")
+    page.close()
+    assert state == {"nag": False, "backdrop": False, "late": 0, "newsletter": True,
+                     "overflow": "auto", "blur": "none"}, state
