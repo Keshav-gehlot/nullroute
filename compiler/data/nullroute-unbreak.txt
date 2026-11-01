@@ -1,0 +1,10 @@
+! Title: NullRoute unbreak
+! Exceptions for entries that break core site features when blocked everywhere.
+! Each line needs a reason. Compiled into the "ublock" ruleset, after uBlock's
+! own unbreak and quick-fixes lists.
+!
+! JW Player asks entitlements.jwplayer.com whether a video may play (signed /
+! protected streams). StevenBlack hosts blocks it on every site, which makes
+! JW Player fail with error 232011 "This video file cannot be played".
+! uBlock filters already except it per site (viu.tv, digisport.ro).
+@@||entitlements.jwplayer.com^

@@ -15,7 +15,7 @@
     {
       "id": "ublock",
       "name": "Ads (uBlock fixes)",
-      "description": "uBlock filters: anti-adblock defusers and fixes for sites EasyList misses",
+      "description": "uBlock filters: anti-adblock defusers, fixes for sites EasyList misses, and uBlock's own breakage fixes",
       "enabledByDefault": true,
       "targets": [
         "chrome",
@@ -24,6 +24,18 @@
       "sources": [
         {
           "url": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
+          "license": "GPL-3.0"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt",
+          "license": "GPL-3.0"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt",
+          "license": "GPL-3.0"
+        },
+        {
+          "file": "data/nullroute-unbreak.txt",
           "license": "GPL-3.0"
         }
       ]

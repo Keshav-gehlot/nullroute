@@ -105,11 +105,16 @@ def main(argv: list[str] | None = None) -> int:
         versions = []
         for i, src in enumerate(rs["sources"]):
             name = f"{rs['id']}-{i}"
-            print(f"• {rs['id']}: {src['url']}")
-            text = fetch(src["url"], args.cache, args.offline, name)
+            if "file" in src:  # a list maintained in this repository
+                text = (args.sources.resolve().parent / src["file"]).read_text(encoding="utf-8")
+                origin = src["file"]
+            else:
+                text = fetch(src["url"], args.cache, args.offline, name)
+                origin = src["url"]
+            print(f"• {rs['id']}: {origin}")
             fmt = src.get("format") or detect_format(text[:4096])
             result.extend(parse_abp(text.splitlines()) if fmt == "abp" else parse_hosts(text.splitlines()))
-            versions.append({"url": src["url"], "version": list_version(text),
+            versions.append({"url": origin, "version": list_version(text),
                              "license": src.get("license"), "format": fmt})
         parsed[rs["id"]] = result
         report["rulesets"][rs["id"]] = {
@@ -212,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     hosts = set().union(*(parsed[rs["id"]].hosts for rs in dns_sets))
     block, allow, dstats = dns.build([n for rs in dns_sets for n in parsed[rs["id"]].network], hosts)
     header = [f"NullRoute DNS blocklist — generated {report['generatedAt']}",
-              "Sources: " + ", ".join(s["url"] for rs in dns_sets for s in rs["sources"])]
+              "Sources: " + ", ".join(s.get("url") or s["file"] for rs in dns_sets for s in rs["sources"])]
     report["files"]["dns/blocklist.txt"] = write_lines(out / "dns" / "blocklist.txt", block, header)
     report["files"]["dns/allowlist.txt"] = write_lines(out / "dns" / "allowlist.txt", allow, header)
     report["dns"] = dstats

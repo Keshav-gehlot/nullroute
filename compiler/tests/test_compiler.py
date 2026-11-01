@@ -472,3 +472,25 @@ def test_dist_reputation_sane():
         sample = [l.strip() for l in feed.read_text().splitlines()[:2000:97] if l.strip() and not l.startswith("#")]
         found = sum(bool(rep.is_listed(d, prefixes, shard)) for d in sample)
         assert found >= len(sample) * 0.9
+
+
+@pytest.mark.skipif(not (DIST / "report.json").exists(), reason="run the compiler first")
+def test_dist_unbreak_exceptions_win_on_every_platform():
+    # NullRoute's own unbreak list (data/nullroute-unbreak.txt) must beat the hosts list:
+    # an allow rule at a priority >= any block rule in Chrome, and gone from the DNS blocklist.
+    host = "entitlements.jwplayer.com"
+    rules = [r for f in (DIST / "chrome").glob("rules_*.json") for r in json.loads(f.read_text())]
+    hits = [r for r in rules if host in json.dumps(r["condition"])]
+    allow = [r for r in hits if r["action"]["type"] in ("allow", "allowAllRequests")]
+    block = [r for r in hits if r["action"]["type"] == "block"]
+    assert allow and all(max(a["priority"] for a in allow) >= b["priority"] for b in block)
+    dns = {l.strip() for l in (DIST / "dns/blocklist.txt").read_text().splitlines() if not l.startswith("#")}
+    assert host not in dns
+
+
+def test_detect_format():
+    from nullroute_compiler.abp import detect_format
+    assert detect_format("! Title: quick fixes\nexample.com##+js(set-constant, a, 1)\n") == "abp"
+    assert detect_format("! comment only\n@@||cdn.example^\n") == "abp"
+    assert detect_format("# StevenBlack\n0.0.0.0 ads.example\n") == "hosts"
+    assert detect_format("ads.example\ntracker.example\n") == "hosts"

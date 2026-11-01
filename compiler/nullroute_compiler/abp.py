@@ -457,8 +457,15 @@ def parse_hosts(lines: Iterable[str]) -> ParseResult:
 
 
 def detect_format(text_head: str) -> str:
+    """'abp' for Adblock Plus / uBlock syntax, else 'hosts'.
+
+    A list that opens with "! Title:"-style comments is ABP even when its first
+    few KB hold only cosmetic or scriptlet rules (e.g. uBlock's quick-fixes).
+    """
     head = text_head.lstrip()
-    if head.startswith("[Adblock") or "\n||" in text_head or "\n##" in text_head:
+    if head.startswith(("[Adblock", "!")):
+        return "abp"
+    if any(m in text_head for m in ("\n||", "\n@@", "\n##", "##+js(", "#@#")):
         return "abp"
     return "hosts"
 
