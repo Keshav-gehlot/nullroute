@@ -152,6 +152,22 @@ def main(argv: list[str] | None = None) -> int:
     report["cosmetic"] = cstats
     report["files"]["chrome/cosmetic.json"] = write_json(out / "chrome" / "cosmetic.json", cosmetic_ir)
 
+    # ---- Generic element hiding for the Android NullRoute Browser -----------------
+    # Same rules as the extension's generic.css (see extension/scripts/build.mjs).
+    generic = list(cosmetic_ir["generic"])
+    excluded = set(cosmetic_ir.get("generichide", [])) | set(cosmetic_ir.get("elemhide", []))
+    generic_set = set(generic)
+    for domain, sels in cosmetic_ir.get("exceptions", {}).items():
+        if any(x in generic_set for x in sels):
+            excluded.add(domain)
+    css = "\n".join(",\n".join(generic[i:i + 400]) + "{display:none!important}" for i in range(0, len(generic), 400))
+    (out / "web").mkdir(parents=True, exist_ok=True)
+    blob = (css + "\n").encode()
+    (out / "web" / "generic.css").write_bytes(blob)
+    report["files"]["web/generic.css"] = hashlib.sha256(blob).hexdigest()
+    report["files"]["web/generic-excluded.txt"] = write_lines(
+        out / "web" / "generic-excluded.txt", sorted(excluded), ["Sites that opted out of generic element hiding"])
+
     # ---- Chrome DNR ---------------------------------------------------------
     meta = []
     total_rules = 0

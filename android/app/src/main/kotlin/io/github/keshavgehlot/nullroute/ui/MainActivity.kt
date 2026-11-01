@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ListAlt
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Icon
@@ -50,8 +51,9 @@ class MainActivity : ComponentActivity() {
                         NavigationBar {
                             listOf(
                                 Triple("Protection", Icons.Outlined.Shield, 0),
-                                Triple("Activity", Icons.Outlined.ListAlt, 1),
-                                Triple("Settings", Icons.Outlined.Settings, 2),
+                                Triple("Browse", Icons.Outlined.Public, 1),
+                                Triple("Activity", Icons.Outlined.ListAlt, 2),
+                                Triple("Settings", Icons.Outlined.Settings, 3),
                             ).forEach { (label, icon, i) ->
                                 NavigationBarItem(
                                     selected = tab == i,
@@ -66,7 +68,8 @@ class MainActivity : ComponentActivity() {
                     val mod = Modifier.padding(padding)
                     when (tab) {
                         0 -> HomeScreen(app, mod, onStart = ::requestStart, onStop = ::stopVpn)
-                        1 -> ActivityScreen(app, mod)
+                        1 -> BrowserScreen(app, mod)
+                        2 -> ActivityScreen(app, mod)
                         else -> SettingsScreen(app, mod)
                     }
                 }

@@ -24,6 +24,7 @@ val syncLists by tasks.registering(Copy::class) {
     }
     from(listsDir) { include("blocklist.txt", "allowlist.txt", "cname_targets.txt", "dga_model.txt", "compat.txt") }
     from(listsDir.resolve("../rep")) { include("prefixes.rice") }  // reputation prefix set (~3.7 MB)
+    from(listsDir.resolve("../web")) { include("generic.css", "generic-excluded.txt"); into("web") }  // NullRoute Browser
     into(generatedAssets.map { it.dir("lists") })
 }
 
@@ -90,6 +91,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.androidx.work)
+    implementation(libs.androidx.webkit)
     implementation(libs.coroutines.android)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
