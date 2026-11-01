@@ -32,6 +32,7 @@ class BlocklistRepository(private val context: Context, private val settings: Se
     private var blocked: Set<String>? = null
     private var allowed: Set<String> = emptySet()
     private var cnameTargets: Set<String> = emptySet()
+    private var compat: Set<String> = emptySet()
 
     val domainCount: Int get() = blocked?.size ?: 0
 
@@ -65,13 +66,15 @@ class BlocklistRepository(private val context: Context, private val settings: Se
     suspend fun matcher(): DomainMatcher = mutex.withLock {
         val b = blocked ?: load().also { blocked = it }
         val s = settings.current
-        DomainMatcher(b, allowed, s.userBlocked, s.userAllowed, cnameTargets)
+        DomainMatcher(b, allowed, s.userBlocked, s.userAllowed, cnameTargets, compat)
     }
 
     private suspend fun load(): Set<String> = withContext(Dispatchers.IO) {
         allowed = open("allowlist.txt")?.use { DomainMatcher.readList(it.bufferedReader()) } ?: emptySet()
         // Trackers that hide behind CNAME aliases; consulted only for answers' CNAME targets.
         cnameTargets = open("cname_targets.txt")?.use { DomainMatcher.readList(it.bufferedReader()) } ?: emptySet()
+        // Ad loader hosts let through to avoid ad-blocker detection (compiler/data/antiadblock-compat.txt).
+        compat = open("compat.txt")?.use { DomainMatcher.readList(it.bufferedReader()) } ?: emptySet()
         open("blocklist.txt")?.use { DomainMatcher.readList(it.bufferedReader()) }
             ?: throw IOException("No blocklist bundled with the app")
     }
@@ -90,7 +93,7 @@ class BlocklistRepository(private val context: Context, private val settings: Se
             return@withContext UpdateResult(false, domainCount, version)
         }
         for ((path, name) in listOf("dns/blocklist.txt", "dns/allowlist.txt", "dns/cname_targets.txt",
-            "dns/dga_model.txt", "rep/prefixes.rice").map { it to it.substringAfter('/') }) {
+            "dns/dga_model.txt", "dns/compat.txt", "rep/prefixes.rice").map { it to it.substringAfter('/') }) {
             val expected = files.optString(path).ifEmpty { null } ?: continue
             val bytes = fetch(BuildConfig.LISTS_BRANCH_URL + path)
             val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

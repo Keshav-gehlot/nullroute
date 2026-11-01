@@ -26,6 +26,10 @@ class AppResolver(private val context: Context) {
         }
     }
 
+    /** Package names sharing [uid] (usually one). */
+    fun packages(uid: Int): Set<String> =
+        if (uid < 0) emptySet() else pm.getPackagesForUid(uid)?.toSet() ?: emptySet()
+
     /** Launchable apps (visible via the <queries> declaration in the manifest). */
     fun launchableApps(): List<AppInfo> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)

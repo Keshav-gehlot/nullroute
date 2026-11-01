@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import io.github.keshavgehlot.nullroute.BuildConfig
+import io.github.keshavgehlot.nullroute.core.CompatMode
 import io.github.keshavgehlot.nullroute.NullRouteApp
 import io.github.keshavgehlot.nullroute.core.DomainMatcher
 import io.github.keshavgehlot.nullroute.data.AppInfo
@@ -59,7 +60,7 @@ import io.github.keshavgehlot.nullroute.vpn.NullRouteVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private enum class Page { MAIN, APPS, RULES }
+private enum class Page { MAIN, APPS, COMPAT_APPS, RULES }
 
 @Composable
 fun SettingsScreen(app: NullRouteApp, modifier: Modifier) {
@@ -67,7 +68,19 @@ fun SettingsScreen(app: NullRouteApp, modifier: Modifier) {
     BackHandler(enabled = page != Page.MAIN) { page = Page.MAIN }
     when (page) {
         Page.MAIN -> MainSettings(app, modifier) { page = it }
-        Page.APPS -> ExcludedApps(app, modifier) { page = Page.MAIN }
+        Page.APPS -> AppPicker(
+            app, modifier, "Apps that skip NullRoute",
+            "Excluded apps use your normal DNS with no blocking. Changes apply instantly.",
+            selected = { it.excludedApps },
+            onToggle = { pkg, on -> app.settings.setExcluded(pkg, on); NullRouteVpnService.restart(app) },
+        ) { page = Page.MAIN }
+        Page.COMPAT_APPS -> AppPicker(
+            app, modifier, "Avoid detection in these apps",
+            "These apps can load ad loader scripts, so they don't notice the ad blocker. " +
+                "Ads and trackers stay blocked for them.",
+            selected = { it.compatApps },
+            onToggle = { pkg, on -> app.settings.setCompatApp(pkg, on); NullRouteVpnService.reload(app) },
+        ) { page = Page.MAIN }
         Page.RULES -> MyRules(app, modifier) { page = Page.MAIN }
     }
 }
@@ -101,6 +114,38 @@ private fun MainSettings(app: NullRouteApp, modifier: Modifier, open: (Page) -> 
         Section("Exceptions")
         NavRow("Apps that skip NullRoute", "${s.excludedApps.size} excluded — use for apps that break") { open(Page.APPS) }
         NavRow("My blocked & allowed domains", "${s.userBlocked.size} blocked, ${s.userAllowed.size} allowed") { open(Page.RULES) }
+
+        Section("Ad-blocker detection")
+        Text(
+            "Some sites and video players refuse to play, or ask you to turn off your ad blocker, when " +
+                "their ad loader script is missing. NullRoute can let just those loaders through: the ads " +
+                "they'd fetch and all trackers stay blocked.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
+        for ((mode, label) in listOf(
+            CompatMode.EVERYWHERE to "Avoid detection everywhere (recommended)",
+            CompatMode.SELECTED_APPS to "Only in apps I choose",
+            CompatMode.OFF to "Off — block loaders too (strictest)",
+        )) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .selectable(selected = s.compatMode == mode, role = Role.RadioButton, onClick = {
+                        app.settings.setCompatMode(mode)
+                        NullRouteVpnService.reload(context)
+                    })
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = s.compatMode == mode, onClick = null)
+                Spacer(Modifier.width(8.dp))
+                Text(label)
+            }
+        }
+        if (s.compatMode == CompatMode.SELECTED_APPS) {
+            NavRow("Choose apps", "${s.compatApps.size} chosen — add your video and streaming apps") { open(Page.COMPAT_APPS) }
+        }
 
         Section("Unlisted domains")
         ToggleRow(
@@ -191,19 +236,27 @@ private fun SubPageHeader(title: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ExcludedApps(app: NullRouteApp, modifier: Modifier, onBack: () -> Unit) {
+private fun AppPicker(
+    app: NullRouteApp,
+    modifier: Modifier,
+    title: String,
+    description: String,
+    selected: (io.github.keshavgehlot.nullroute.data.SettingsSnapshot) -> Set<String>,
+    onToggle: (String, Boolean) -> Unit,
+    onBack: () -> Unit,
+) {
     val s by app.settings.state.collectAsState()
-    val context = LocalContext.current
+    val chosen = selected(s)
     var apps by remember { mutableStateOf<List<AppInfo>?>(null) }
     var query by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { apps = withContext(Dispatchers.IO) { app.apps.launchableApps() } }
     val shown = apps.orEmpty().filter { query.isBlank() || it.label.contains(query, true) || it.packageName.contains(query, true) }
-        .sortedByDescending { it.packageName in s.excludedApps }
+        .sortedByDescending { it.packageName in chosen }
 
     Column(modifier.fillMaxSize()) {
-        SubPageHeader("Apps that skip NullRoute", onBack)
+        SubPageHeader(title, onBack)
         Text(
-            "Excluded apps use your normal DNS with no blocking. Changes apply instantly.",
+            description,
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 20.dp),
         )
@@ -214,7 +267,7 @@ private fun ExcludedApps(app: NullRouteApp, modifier: Modifier, onBack: () -> Un
         if (apps == null) Text("Loading apps…", modifier = Modifier.padding(20.dp))
         LazyColumn {
             items(shown, key = { it.packageName }) { a ->
-                val excluded = a.packageName in s.excludedApps
+                val on = a.packageName in chosen
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -227,10 +280,7 @@ private fun ExcludedApps(app: NullRouteApp, modifier: Modifier, onBack: () -> Un
                         Text(a.packageName, style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(checked = excluded, onCheckedChange = {
-                        app.settings.setExcluded(a.packageName, it)
-                        NullRouteVpnService.restart(context)
-                    })
+                    Switch(checked = on, onCheckedChange = { onToggle(a.packageName, it) })
                 }
             }
         }

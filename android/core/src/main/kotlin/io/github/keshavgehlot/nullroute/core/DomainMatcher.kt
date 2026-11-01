@@ -18,6 +18,8 @@ enum class Verdict(val blocked: Boolean) {
     BLOCKED_BY_REPUTATION(true),
     /** Blocked by the TLS SNI or HTTP Host of a connection (full-tunnel mode). */
     BLOCKED_BY_SNI(true),
+    /** On a list, but an ad *loader* that sites probe to detect ad blockers; let through on purpose. */
+    ALLOWED_FOR_COMPAT(false),
 }
 
 /**
@@ -33,6 +35,8 @@ class DomainMatcher(
     private val userBlocked: Set<String> = emptySet(),
     private val userAllowed: Set<String> = emptySet(),
     private val cnameTargets: Set<String> = emptySet(),
+    /** Exact hostnames unblocked to avoid ad-blocker detection (compat.txt). */
+    private val compat: Set<String> = emptySet(),
 ) {
     val size: Int get() = listBlocked.size
 
@@ -46,7 +50,10 @@ class DomainMatcher(
     }
 
     fun withUserRules(blocked: Set<String>, allowed: Set<String>) =
-        DomainMatcher(listBlocked, listAllowed, blocked, allowed, cnameTargets)
+        DomainMatcher(listBlocked, listAllowed, blocked, allowed, cnameTargets, compat)
+
+    /** Exact-name match only: a loader host, never its siblings or parent. */
+    fun isCompat(name: String): Boolean = name.lowercase().trimEnd('.') in compat
 
     /**
      * Should a lookup be blocked because its answer aliases to [target]?

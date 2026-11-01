@@ -1,0 +1,26 @@
+# Ad-blocker detection compatibility list (Android app).
+#
+# Sites and video players detect a DNS ad blocker by checking whether an ad
+# *loader* script arrived (adsbygoogle.js, gpt.js, the IMA video-ad SDK...).
+# When "Avoid ad-blocker detection" is on, the app lets ONLY these exact
+# hostnames resolve. The servers that deliver the ads themselves and every
+# tracker stay blocked, so loaders arrive but find no ads to show. Video players
+# then get an ad error and play the content, which is their normal no-ad path.
+#
+# Exact hostnames only: subdomains of these are NOT unblocked.
+# fundingchoicesmessages.google.com (Google's "turn off your ad blocker" prompt)
+# deliberately stays blocked.
+
+# Google IMA SDK: video players (JW Player, Video.js, Brightcove...) load ads with it
+imasdk.googleapis.com
+# Google AdSense loader (adsbygoogle.js): the most common detection bait
+pagead2.googlesyndication.com
+# Google Publisher Tag loader (gpt.js)
+securepubads.g.doubleclick.net
+www.googletagservices.com
+# Google ad-status probe used by detection scripts
+static.doubleclick.net
+# IMA / instream assets
+s0.2mdn.net
+# Amazon Publisher Services loader (apstag.js)
+c.amazon-adsystem.com

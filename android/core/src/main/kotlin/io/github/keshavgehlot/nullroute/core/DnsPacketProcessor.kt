@@ -5,8 +5,18 @@ sealed interface Decision {
     /** Not a DNS query for our virtual resolver; drop it. */
     data object Drop : Decision
 
-    /** Answer immediately by writing [packet] back to the tunnel. */
-    class Respond(val packet: ByteArray, val request: UdpPacket, val event: QueryEvent) : Decision
+    /**
+     * Answer immediately by writing [packet] back to the tunnel.
+     * [compatFallback] is set when the block may be lifted for the requesting app
+     * (ad-blocker detection compat in "selected apps" mode): the caller knows the
+     * app, the processor doesn't.
+     */
+    class Respond(
+        val packet: ByteArray,
+        val request: UdpPacket,
+        val event: QueryEvent,
+        val compatFallback: Forward? = null,
+    ) : Decision
 
     /** Send [query] upstream; wrap the answer with [reply] and write it back. */
     class Forward(
@@ -24,7 +34,7 @@ sealed interface Decision {
             // CNAME uncloaking: metrics.shop.com -> shop.tracker.net. The queried
             // name passed the lists, so inspect where the answer actually points.
             val m = matcher
-            if (m != null && event.verdict != Verdict.ALLOWED_BY_USER && event.verdict != Verdict.ALLOWED_BY_LIST) {
+            if (m != null && event.verdict !in NO_UNCLOAK) {
                 val blockedTarget = DnsQuery.cnameTargets(answer)?.firstOrNull(m::blocksCnameTarget)
                 if (blockedTarget != null) {
                     event.verdict = Verdict.BLOCKED_BY_CNAME
@@ -35,6 +45,12 @@ sealed interface Decision {
             return request.reply(answer)
         }
         fun failure(): ByteArray = request.reply(parsed.failureResponse())
+
+        private companion object {
+            // Explicitly allowed names are never second-guessed by their CNAME chain
+            // (a compat loader such as pagead2.googlesyndication.com aliases into doubleclick.net).
+            val NO_UNCLOAK = setOf(Verdict.ALLOWED_BY_USER, Verdict.ALLOWED_BY_LIST, Verdict.ALLOWED_FOR_COMPAT)
+        }
         fun blocked(): ByteArray = request.reply(parsed.blockedResponse())
     }
 }
@@ -53,6 +69,9 @@ data class QueryEvent(
     /** The name hit the local prefix set but the shard couldn't be checked (allowed). */
     var reputationUnavailable: Boolean = false,
 )
+
+/** "Avoid ad-blocker detection": whether loader hosts in compat.txt are let through. */
+enum class CompatMode { OFF, SELECTED_APPS, EVERYWHERE }
 
 /**
  * Pure decision logic for the VPN's packet loop. Holds no sockets and does no
@@ -74,6 +93,7 @@ class DnsPacketProcessor(
      * from the address the app asked, so it can't tell.
      */
     @Volatile var anyResolver: Boolean = false,
+    @Volatile var compatMode: CompatMode = CompatMode.OFF,
 ) {
     fun process(buf: ByteArray, length: Int): Decision {
         val pkt = UdpPacket.parse(buf, length) ?: return Decision.Drop
@@ -99,6 +119,12 @@ class DnsPacketProcessor(
                 DgaDetector.Level.FLAG -> event.suspicious = true
                 else -> Unit
             }
+        }
+        if (verdict == Verdict.BLOCKED_BY_LIST && compatMode != CompatMode.OFF && m.isCompat(query.name)) {
+            val allowed = QueryEvent(event.timeMillis, query.name, query.type, Verdict.ALLOWED_FOR_COMPAT)
+            val forward = Decision.Forward(pkt.payload, pkt, query, allowed, m)
+            if (compatMode == CompatMode.EVERYWHERE) return forward
+            return Decision.Respond(pkt.reply(query.blockedResponse()), pkt, event, compatFallback = forward)
         }
         if (verdict.blocked) return Decision.Respond(pkt.reply(query.blockedResponse()), pkt, event)
         // Reputation: only names no list or user rule has decided. The local

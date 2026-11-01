@@ -2,6 +2,7 @@ package io.github.keshavgehlot.nullroute.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import io.github.keshavgehlot.nullroute.core.CompatMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +26,9 @@ data class SettingsSnapshot(
     val reputation: Boolean,
     /** Route all traffic through the tunnel and block by TLS SNI / HTTP Host (more battery). */
     val fullTunnel: Boolean,
+    /** Let ad *loader* hosts through so sites and video players don't detect the blocker. */
+    val compatMode: CompatMode,
+    val compatApps: Set<String>,
     val listsUpdatedAt: Long,
     val listsVersion: String?,
 )
@@ -45,6 +49,9 @@ class Settings(context: Context) {
         blockSuspicious = prefs.getBoolean("block_suspicious", false),
         reputation = prefs.getBoolean("reputation", true),
         fullTunnel = prefs.getBoolean("full_tunnel", false),
+        compatMode = runCatching { CompatMode.valueOf(prefs.getString("compat_mode", null)!!) }
+            .getOrDefault(CompatMode.EVERYWHERE),
+        compatApps = prefs.getStringSet("compat_apps", emptySet())!!.toSet(),
         listsUpdatedAt = prefs.getLong("lists_updated_at", 0L),
         listsVersion = prefs.getString("lists_version", null),
     )
@@ -59,6 +66,10 @@ class Settings(context: Context) {
     fun setBlockSuspicious(on: Boolean) = edit { putBoolean("block_suspicious", on) }
     fun setReputation(on: Boolean) = edit { putBoolean("reputation", on) }
     fun setFullTunnel(on: Boolean) = edit { putBoolean("full_tunnel", on) }
+    fun setCompatMode(mode: CompatMode) = edit { putString("compat_mode", mode.name) }
+    fun setCompatApp(pkg: String, on: Boolean) = edit {
+        putStringSet("compat_apps", current.compatApps.toMutableSet().apply { if (on) add(pkg) else remove(pkg) })
+    }
     fun setExcluded(pkg: String, excluded: Boolean) = edit {
         putStringSet("excluded_apps", current.excludedApps.toMutableSet().apply { if (excluded) add(pkg) else remove(pkg) })
     }

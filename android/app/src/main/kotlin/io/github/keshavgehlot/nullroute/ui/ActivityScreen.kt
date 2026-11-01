@@ -140,6 +140,10 @@ fun ActivityScreen(app: NullRouteApp, modifier: Modifier) {
                         Verdict.BLOCKED_BY_SNI ->
                             "An app connected to this site without a normal DNS lookup (its own resolver or a " +
                                 "hard-coded address). NullRoute read the site name from the connection and blocked it."
+                        Verdict.ALLOWED_FOR_COMPAT ->
+                            "This is an ad loader that sites and video players check for to detect ad blockers, so " +
+                                "NullRoute let it through. The ads it would fetch are still blocked. " +
+                                "Change this under Settings › Ad-blocker detection."
                         Verdict.DOH_CANARY ->
                             "Firefox checks this name to decide whether to bypass system DNS. " +
                                 "NullRoute answers \"doesn't exist\" so Firefox stays filtered."
@@ -176,6 +180,7 @@ private fun verdictLabel(v: Verdict) = when (v) {
     Verdict.BLOCKED_BY_USER -> "Blocked (you)"
     Verdict.BLOCKED_BY_REPUTATION -> "Blocked (dangerous)"
     Verdict.BLOCKED_BY_SNI -> "Blocked (connection)"
+    Verdict.ALLOWED_FOR_COMPAT -> "Allowed (anti-detection)"
     Verdict.ALLOWED_BY_USER -> "Allowed (you)"
     Verdict.ALLOWED_BY_LIST, Verdict.ALLOWED -> "Allowed"
 }

@@ -22,7 +22,7 @@ val syncLists by tasks.registering(Copy::class) {
             )
         }
     }
-    from(listsDir) { include("blocklist.txt", "allowlist.txt", "cname_targets.txt", "dga_model.txt") }
+    from(listsDir) { include("blocklist.txt", "allowlist.txt", "cname_targets.txt", "dga_model.txt", "compat.txt") }
     from(listsDir.resolve("../rep")) { include("prefixes.rice") }  // reputation prefix set (~3.7 MB)
     into(generatedAssets.map { it.dir("lists") })
 }

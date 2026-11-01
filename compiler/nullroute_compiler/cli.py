@@ -234,6 +234,15 @@ def main(argv: list[str] | None = None) -> int:
             ["CNAME targets: block a lookup only when its answer aliases to one of these", src["url"]])
         report["dns"]["cname_targets"] = len(targets)
 
+    # Ad-blocker detection compatibility hosts (Android "Avoid ad-blocker detection").
+    compat_path = Path(__file__).resolve().parent.parent / "data" / "antiadblock-compat.txt"
+    if compat_path.exists():
+        compat = sorted({l.split("#", 1)[0].strip().lower() for l in compat_path.read_text().splitlines()} - {""})
+        report["files"]["dns/compat.txt"] = write_lines(
+            out / "dns" / "compat.txt", compat,
+            ["Loader hosts unblocked to avoid ad-blocker detection; see compiler/data/antiadblock-compat.txt"])
+        report["dns"]["compat"] = len(compat)
+
     # DGA heuristic model (trained offline by `python -m nullroute_compiler.dga train`).
     model_path = Path(__file__).resolve().parent.parent / "data" / "dga_model.json"
     if model_path.exists():

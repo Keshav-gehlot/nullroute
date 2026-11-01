@@ -494,3 +494,18 @@ def test_detect_format():
     assert detect_format("! comment only\n@@||cdn.example^\n") == "abp"
     assert detect_format("# StevenBlack\n0.0.0.0 ads.example\n") == "hosts"
     assert detect_format("ads.example\ntracker.example\n") == "hosts"
+
+
+@pytest.mark.skipif(not (DIST / "dns/compat.txt").exists(), reason="run the compiler first")
+def test_dist_compat_hosts_are_loaders_only():
+    compat = [l.strip() for l in (DIST / "dns/compat.txt").read_text().splitlines()
+              if l.strip() and not l.startswith("#")]
+    assert 0 < len(compat) <= 20, "keep the detection-compat list small and reviewed"
+    assert all(c.count(".") >= 2 for c in compat), "exact hostnames only, never a whole registrable domain"
+    # Google's own ad-blocker nag must stay blocked.
+    assert "fundingchoicesmessages.google.com" not in compat
+    from nullroute_compiler.domains import parents
+    blocked = {l.strip() for l in (DIST / "dns/blocklist.txt").read_text().splitlines() if not l.startswith("#")}
+    assert "fundingchoicesmessages.google.com" in blocked
+    # every entry is actually blocked today (otherwise it is dead weight)
+    assert all(any(p in blocked for p in parents(c)) for c in compat)

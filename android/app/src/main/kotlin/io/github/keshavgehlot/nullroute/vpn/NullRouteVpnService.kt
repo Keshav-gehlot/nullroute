@@ -114,6 +114,7 @@ class NullRouteVpnService : VpnService() {
                 app.lists.matcher(), listOf(VIRTUAL_DNS_V4.address, VIRTUAL_DNS_V6.address),
                 dga = app.lists.dgaDetector(), blockSuspicious = s.blockSuspicious,
                 reputation = if (s.reputation) app.lists.reputationChecker() else null,
+                compatMode = s.compatMode,
             )
             forwarder = DnsForwarder(
                 upstreams = ::upstreams,
@@ -241,6 +242,14 @@ class NullRouteVpnService : VpnService() {
             is Decision.Forward -> attribute(decision.request, decision.event)
             Decision.Drop -> Unit
         }
+        // "Avoid ad-blocker detection" for chosen apps only: the processor can't
+        // know the app, so it offers a fallback and we decide here.
+        val fallback = (decision as? Decision.Respond)?.compatFallback
+        if (fallback != null && app.apps.packages(decision.event.uid).any { it in app.settings.current.compatApps }) {
+            fallback.event.uid = decision.event.uid
+            forwarder?.handle(fallback)
+            return
+        }
         forwarder?.handle(decision)
     }
 
@@ -250,6 +259,7 @@ class NullRouteVpnService : VpnService() {
             processor?.dga = app.lists.dgaDetector()
             processor?.blockSuspicious = app.settings.current.blockSuspicious
             processor?.reputation = if (app.settings.current.reputation) app.lists.reputationChecker() else null
+            processor?.compatMode = app.settings.current.compatMode
         } catch (e: Exception) {
             Log.e(TAG, "reload failed", e)
         }
