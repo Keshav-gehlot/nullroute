@@ -31,3 +31,7 @@ DerivedData/
 .DS_Store
 .vscode/
 *.zip
+
+# Local build outputs
+release/
+android/build.log
