@@ -15,6 +15,8 @@ sealed interface Decision {
         val parsed: DnsQuery,
         val event: QueryEvent,
         private val matcher: DomainMatcher? = null,
+        /** Set when the name hit the local reputation prefix set; runs in parallel with the upstream query. */
+        val reputationCheck: (() -> ReputationChecker.Result)? = null,
     ) : Decision {
         fun reply(answer: ByteArray): ByteArray? {
             // Only accept the answer to *this* query (guards against spoofing).
@@ -33,6 +35,7 @@ sealed interface Decision {
             return request.reply(answer)
         }
         fun failure(): ByteArray = request.reply(parsed.failureResponse())
+        fun blocked(): ByteArray = request.reply(parsed.blockedResponse())
     }
 }
 
@@ -45,6 +48,10 @@ data class QueryEvent(
     var cnameTarget: String? = null,
     /** On no list, but looks machine-generated (shown as a warning; blocked only if opted in). */
     var suspicious: Boolean = false,
+    /** The listed domain that matched, for BLOCKED_BY_REPUTATION. */
+    var reputationMatch: String? = null,
+    /** The name hit the local prefix set but the shard couldn't be checked (allowed). */
+    var reputationUnavailable: Boolean = false,
 )
 
 /**
@@ -60,11 +67,18 @@ class DnsPacketProcessor(
     private val clock: () -> Long = System::currentTimeMillis,
     @Volatile var dga: DgaDetector? = null,
     @Volatile var blockSuspicious: Boolean = false,
+    @Volatile var reputation: ReputationChecker? = null,
+    /**
+     * Full-tunnel mode: answer DNS queries sent to *any* address, so apps with
+     * hard-coded resolvers (8.8.8.8 etc.) are filtered too. The reply comes back
+     * from the address the app asked, so it can't tell.
+     */
+    @Volatile var anyResolver: Boolean = false,
 ) {
     fun process(buf: ByteArray, length: Int): Decision {
         val pkt = UdpPacket.parse(buf, length) ?: return Decision.Drop
         if (pkt.destinationPort != 53) return Decision.Drop
-        if (resolverAddresses.none { it.contentEquals(pkt.destination) }) return Decision.Drop
+        if (!anyResolver && resolverAddresses.none { it.contentEquals(pkt.destination) }) return Decision.Drop
         val query = DnsQuery.parse(pkt.payload) ?: return Decision.Drop
         if (query.name == DOH_CANARY) {
             // Firefox disables its built-in DoH when this name doesn't resolve,
@@ -86,11 +100,15 @@ class DnsPacketProcessor(
                 else -> Unit
             }
         }
-        return if (verdict.blocked) {
-            Decision.Respond(pkt.reply(query.blockedResponse()), pkt, event)
-        } else {
-            Decision.Forward(pkt.payload, pkt, query, event, m)
-        }
+        if (verdict.blocked) return Decision.Respond(pkt.reply(query.blockedResponse()), pkt, event)
+        // Reputation: only names no list or user rule has decided. The local
+        // prefix check is in-memory; the shard fetch (rare) runs alongside the
+        // upstream query in the forwarder, so it adds no latency to clean names.
+        val rep = reputation
+        val check = if (verdict == Verdict.ALLOWED && rep != null && rep.hasLocalHit(query.name)) {
+            { rep.check(query.name) }
+        } else null
+        return Decision.Forward(pkt.payload, pkt, query, event, m, check)
     }
 
     companion object {

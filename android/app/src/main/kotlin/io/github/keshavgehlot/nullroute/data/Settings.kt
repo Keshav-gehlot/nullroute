@@ -21,6 +21,10 @@ data class SettingsSnapshot(
     val userAllowed: Set<String>,
     val autoUpdate: Boolean,
     val blockSuspicious: Boolean,
+    /** Check unlisted names against phishing/malware feeds via hash-prefix lookups. */
+    val reputation: Boolean,
+    /** Route all traffic through the tunnel and block by TLS SNI / HTTP Host (more battery). */
+    val fullTunnel: Boolean,
     val listsUpdatedAt: Long,
     val listsVersion: String?,
 )
@@ -39,6 +43,8 @@ class Settings(context: Context) {
         userAllowed = prefs.getStringSet("user_allowed", emptySet())!!.toSet(),
         autoUpdate = prefs.getBoolean("auto_update", true),
         blockSuspicious = prefs.getBoolean("block_suspicious", false),
+        reputation = prefs.getBoolean("reputation", true),
+        fullTunnel = prefs.getBoolean("full_tunnel", false),
         listsUpdatedAt = prefs.getLong("lists_updated_at", 0L),
         listsVersion = prefs.getString("lists_version", null),
     )
@@ -51,6 +57,8 @@ class Settings(context: Context) {
     fun setUpstream(u: Upstream) = edit { putString("upstream", u.name) }
     fun setAutoUpdate(on: Boolean) = edit { putBoolean("auto_update", on) }
     fun setBlockSuspicious(on: Boolean) = edit { putBoolean("block_suspicious", on) }
+    fun setReputation(on: Boolean) = edit { putBoolean("reputation", on) }
+    fun setFullTunnel(on: Boolean) = edit { putBoolean("full_tunnel", on) }
     fun setExcluded(pkg: String, excluded: Boolean) = edit {
         putStringSet("excluded_apps", current.excludedApps.toMutableSet().apply { if (excluded) add(pkg) else remove(pkg) })
     }

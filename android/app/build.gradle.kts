@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// Compiled lists come from the repo's filter compiler (../../dist/dns).
+// Compiled lists come from the repo's filter compiler (../../dist/dns, ../../dist/rep).
 val listsDir = rootProject.file("../dist/dns")
 val generatedAssets = layout.buildDirectory.dir("generated/lists")
 val syncLists by tasks.registering(Copy::class) {
@@ -20,6 +20,7 @@ val syncLists by tasks.registering(Copy::class) {
         }
     }
     from(listsDir) { include("blocklist.txt", "allowlist.txt", "cname_targets.txt", "dga_model.txt") }
+    from(listsDir.resolve("../rep")) { include("prefixes.rice") }  // reputation prefix set (~3.7 MB)
     into(generatedAssets.map { it.dir("lists") })
 }
 
@@ -38,9 +39,10 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        // The `lists` branch CI publishes compiled lists to (see .github/workflows/lists.yml).
         buildConfigField(
-            "String", "LISTS_BASE_URL",
-            "\"https://raw.githubusercontent.com/Keshav-gehlot/nullroute/lists/dns/\"",
+            "String", "LISTS_BRANCH_URL",
+            "\"https://raw.githubusercontent.com/Keshav-gehlot/nullroute/lists/\"",
         )
     }
 

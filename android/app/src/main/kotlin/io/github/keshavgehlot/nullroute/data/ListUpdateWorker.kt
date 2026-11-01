@@ -13,7 +13,7 @@ import io.github.keshavgehlot.nullroute.NullRouteApp
 import io.github.keshavgehlot.nullroute.vpn.NullRouteVpnService
 import java.util.concurrent.TimeUnit
 
-/** Refreshes the blocklist every few days on an unmetered connection. */
+/** Refreshes the lists daily on an unmetered connection (threat feeds change within hours). */
 class ListUpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = NullRouteApp.from(applicationContext)
@@ -36,7 +36,7 @@ class ListUpdateWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 wm.cancelUniqueWork(NAME)
                 return
             }
-            val request = PeriodicWorkRequestBuilder<ListUpdateWorker>(3, TimeUnit.DAYS)
+            val request = PeriodicWorkRequestBuilder<ListUpdateWorker>(1, TimeUnit.DAYS)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.UNMETERED)
@@ -44,7 +44,7 @@ class ListUpdateWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         .build()
                 )
                 .build()
-            wm.enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+            wm.enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
         }
     }
 }

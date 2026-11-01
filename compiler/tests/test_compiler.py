@@ -388,3 +388,87 @@ def test_dist_dga_model_text_matches_json():
     flag, block, min_len = lines[0].split()
     assert float(flag) == MODEL["flagThreshold"] and float(block) == MODEL["blockThreshold"]
     assert lines[1] == MODEL["alphabet"] and len(lines) == 3 + len(MODEL["alphabet"]) + 1
+
+
+# ---------------------------------------------------------------- reputation
+from nullroute_compiler import reputation as rep  # noqa: E402
+
+
+def test_rice_round_trip_edge_cases():
+    import random
+    rng = random.Random(7)
+    for values in ([], [0], [2**32 - 1], [0, 1, 2, 3], [5, 2**32 - 1],
+                   sorted(rng.sample(range(2**32), 5000))):
+        blob = rep.rice_encode(values)
+        assert rep.rice_decode(blob) == values
+    with pytest.raises(ValueError):
+        rep.rice_encode([3, 3])
+    with pytest.raises(ValueError):
+        rep.rice_decode(b"XXXX")
+
+
+def test_lookup_expressions_cover_parents_not_tld():
+    assert rep.lookup_expressions("A.b.Evil.com.") == ["a.b.evil.com", "b.evil.com", "evil.com"]
+    assert rep.lookup_expressions("localhost") == []
+
+
+def test_clean_entries_guards_protected_and_popular():
+    kept, stats = rep.clean_entries(
+        ["evil.com", "x.evil.com", "githubusercontent.com", "github.com", "login-verify.weebly.com",
+         "weebly.com", "bad_name!", "BIT.LY"],
+        protected=["raw.githubusercontent.com", "github.com"], popular=["weebly.com", "bit.ly"])
+    # parents of protected names and exact popular sites are dropped; user sites on them are kept
+    assert kept == ["evil.com", "login-verify.weebly.com"]
+    assert set(stats["droppedProtected"]) == {"githubusercontent.com", "github.com", "weebly.com", "bit.ly"}
+    assert stats["invalid"] == 1 and stats["coveredByParent"] == 1
+
+
+def test_build_and_reference_client(tmp_path):
+    listed = ["evil.com", "phish.weebly.com", "malware.example.org"]
+    out = rep.build(listed, tmp_path)
+    prefixes = rep.rice_decode((tmp_path / "rep/prefixes.rice").read_bytes())
+    fetched = []
+
+    def shard(name):
+        fetched.append(name)
+        return (tmp_path / "rep/shards" / f"{name}.bin").read_bytes()
+
+    assert rep.is_listed("login.evil.com", prefixes, shard) == "evil.com"
+    assert rep.is_listed("phish.weebly.com", prefixes, shard) == "phish.weebly.com"
+    assert rep.is_listed("weebly.com", prefixes, shard) is None
+    fetched.clear()
+    assert rep.is_listed("wikipedia.org", prefixes, shard) is None
+    assert fetched == [], "a clean name with no local prefix hit must not contact the server"
+    # every shard passes the structural check clients apply; a shuffled one fails it
+    for i in range(rep.SHARDS):
+        assert rep.valid_shard(i, (tmp_path / "rep/shards" / f"{rep.shard_name(i)}.bin").read_bytes())
+    i = rep.shard_of(rep.digest("evil.com"))
+    good = (tmp_path / "rep/shards" / f"{rep.shard_name(i)}.bin").read_bytes()
+    assert not rep.valid_shard(i, good[:-1]) and not rep.valid_shard(i ^ 1, good)
+    assert out["stats"]["prefixes"] == 3
+
+
+def test_prefix_hit_but_shard_miss_is_clean(tmp_path):
+    # A clean name whose 32-bit prefix collides with a listed one must be cleared by the shard.
+    rep.build(["evil.com"], tmp_path)
+    clean = "innocent.example"
+    prefixes = sorted({rep.prefix32(rep.digest("evil.com")), rep.prefix32(rep.digest(clean))})
+    shard = lambda n: (tmp_path / "rep/shards" / f"{n}.bin").read_bytes()  # noqa: E731
+    assert rep.is_listed(clean, prefixes, shard) is None
+
+
+@pytest.mark.skipif(not (DIST / "rep/prefixes.rice").exists(), reason="run the compiler first")
+def test_dist_reputation_sane():
+    report = json.loads((DIST / "report.json").read_text())["reputation"]
+    assert report["entries"] > 100_000
+    assert report["bitsPerPrefix"] < 16
+    prefixes = rep.rice_decode((DIST / "rep/prefixes.rice").read_bytes())
+    assert len(prefixes) == report["prefixes"] and prefixes == sorted(set(prefixes))
+    shard = lambda n: (DIST / "rep/shards" / f"{n}.bin").read_bytes()  # noqa: E731
+    canaries = (Path(__file__).parent.parent / "data/canaries.txt").read_text().split()
+    assert {c: rep.is_listed(c, prefixes, shard) for c in canaries if rep.is_listed(c, prefixes, shard)} == {}
+    feed = (Path(__file__).resolve().parents[1] / ".cache/rep-1.txt")
+    if feed.exists():  # a sample of real phishing entries must be found
+        sample = [l.strip() for l in feed.read_text().splitlines()[:2000:97] if l.strip() and not l.startswith("#")]
+        found = sum(bool(rep.is_listed(d, prefixes, shard)) for d in sample)
+        assert found >= len(sample) * 0.9

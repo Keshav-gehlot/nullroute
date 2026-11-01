@@ -14,6 +14,10 @@ enum class Verdict(val blocked: Boolean) {
     DOH_CANARY(false),
     /** On no list, but the name looks algorithmically generated (opt-in blocking). */
     BLOCKED_BY_HEURISTIC(true),
+    /** On a phishing / malware feed, confirmed by a privacy-preserving hash lookup. */
+    BLOCKED_BY_REPUTATION(true),
+    /** Blocked by the TLS SNI or HTTP Host of a connection (full-tunnel mode). */
+    BLOCKED_BY_SNI(true),
 }
 
 /**

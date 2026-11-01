@@ -123,12 +123,17 @@ object Checksum {
 
     /** UDP checksum including the IPv4/IPv6 pseudo-header. Never returns 0 (RFC 768). */
     fun udp(src: ByteArray, dst: ByteArray, packet: ByteArray, udpOff: Int, udpLen: Int): Int {
+        val c = transport(UdpPacket.PROTO_UDP, src, dst, packet, udpOff, udpLen)
+        return if (c == 0) 0xffff else c
+    }
+
+    /** TCP/UDP checksum over the pseudo-header (RFC 793 / RFC 8200 section 8.1) and segment. */
+    fun transport(proto: Int, src: ByteArray, dst: ByteArray, packet: ByteArray, off: Int, len: Int): Int {
         var s = sum(src, 0, src.size, 0)
         s = sum(dst, 0, dst.size, s)
-        s += UdpPacket.PROTO_UDP.toLong()
-        s += udpLen.toLong()
-        val c = fold(sum(packet, udpOff, udpLen, s))
-        return if (c == 0) 0xffff else c
+        s += proto.toLong()
+        s += len.toLong()
+        return fold(sum(packet, off, len, s))
     }
 
     private fun sum(b: ByteArray, off: Int, len: Int, initial: Long): Long {

@@ -103,24 +103,38 @@ private fun MainSettings(app: NullRouteApp, modifier: Modifier, open: (Page) -> 
         NavRow("My blocked & allowed domains", "${s.userBlocked.size} blocked, ${s.userAllowed.size} allowed") { open(Page.RULES) }
 
         Section("Unlisted domains")
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        ToggleRow(
+            "Phishing & malware protection",
+            "Checks sites against ~2.4 million known phishing, scam and malware domains. Names are " +
+                "checked on your phone; only when one looks like a match is a small, anonymous batch of " +
+                "hashes downloaded to confirm it — the site you visit is never sent anywhere.",
+            s.reputation,
         ) {
-            Column(Modifier.weight(1f)) {
-                Text("Block machine-generated-looking domains")
-                Text(
-                    "Catches some brand-new malware and tracker domains that aren't on any list yet. " +
-                        "About 1 in 700 normal sites may be blocked by mistake — tap it in Activity to allow it. " +
-                        "Suspicious names are always marked in Activity, even with this off.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = s.blockSuspicious, onCheckedChange = {
-                app.settings.setBlockSuspicious(it)
-                NullRouteVpnService.reload(context)
-            })
+            app.settings.setReputation(it)
+            NullRouteVpnService.reload(context)
+        }
+        ToggleRow(
+            "Block machine-generated-looking domains",
+            "Catches some brand-new malware and tracker domains that aren't on any list yet. " +
+                "About 1 in 700 normal sites may be blocked by mistake — tap it in Activity to allow it. " +
+                "Suspicious names are always marked in Activity, even with this off.",
+            s.blockSuspicious,
+        ) {
+            app.settings.setBlockSuspicious(it)
+            NullRouteVpnService.reload(context)
+        }
+
+        Section("Advanced")
+        ToggleRow(
+            "Inspect all connections",
+            "Routes all traffic through NullRoute and blocks connections by the site name inside " +
+                "HTTPS (SNI) and HTTP requests. Catches apps that skip system DNS with their own resolver " +
+                "or hard-coded IPs. Uses more battery and may slow downloads; QUIC is turned off so " +
+                "browsers fall back to inspectable HTTPS.",
+            s.fullTunnel,
+        ) {
+            app.settings.setFullTunnel(it)
+            NullRouteVpnService.restart(context)
         }
 
         Section("Filter lists")
@@ -130,7 +144,7 @@ private fun MainSettings(app: NullRouteApp, modifier: Modifier, open: (Page) -> 
         ) {
             Column(Modifier.weight(1f)) {
                 Text("Update automatically")
-                Text("Every few days, on Wi-Fi only", style = MaterialTheme.typography.bodySmall,
+                Text("Daily, on Wi-Fi only", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(checked = s.autoUpdate, onCheckedChange = {
@@ -282,5 +296,20 @@ private fun MyRules(app: NullRouteApp, modifier: Modifier, onBack: () -> Unit) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             }
         }
+    }
+}
+
+@Composable
+private fun ToggleRow(title: String, body: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title)
+            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }

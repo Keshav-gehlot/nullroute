@@ -24,9 +24,11 @@ import io.github.keshavgehlot.nullroute.VpnState
 import io.github.keshavgehlot.nullroute.core.Decision
 import io.github.keshavgehlot.nullroute.core.DnsForwarder
 import io.github.keshavgehlot.nullroute.core.DnsPacketProcessor
+import io.github.keshavgehlot.nullroute.core.FlowRelay
 import io.github.keshavgehlot.nullroute.core.QueryEvent
 import io.github.keshavgehlot.nullroute.core.TunnelLoop
 import io.github.keshavgehlot.nullroute.core.UdpPacket
+import io.github.keshavgehlot.nullroute.core.Verdict
 import io.github.keshavgehlot.nullroute.data.Upstream
 import io.github.keshavgehlot.nullroute.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -48,11 +50,18 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * Local DNS sinkhole built on VpnService.
  *
- * The tunnel routes ONLY two host addresses (a fake IPv4 and IPv6 DNS server)
- * and announces them as the device's DNS servers. All other traffic keeps
- * using the normal network, untouched and at full speed; we only ever see DNS
- * queries. Blocked names get 0.0.0.0 / :: back immediately; everything else is
- * relayed to the real resolver over a socket protected from the tunnel.
+ * By default the tunnel routes ONLY two host addresses (a fake IPv4 and IPv6
+ * DNS server) and announces them as the device's DNS servers. All other
+ * traffic keeps using the normal network, untouched and at full speed; we only
+ * ever see DNS queries. Blocked names get 0.0.0.0 / :: back immediately;
+ * everything else is relayed to the real resolver over a socket protected from
+ * the tunnel.
+ *
+ * Full-tunnel mode (opt-in, "Inspect all connections") routes everything:
+ * DNS to any address is filtered, and TCP/UDP flows are re-originated by
+ * [FlowRelay], which refuses connections whose TLS SNI or HTTP Host is
+ * blocked. NullRoute's own traffic (list updates, reputation shards) is
+ * excluded from the tunnel.
  */
 class NullRouteVpnService : VpnService() {
     private val app by lazy { NullRouteApp.from(this) }
@@ -65,6 +74,7 @@ class NullRouteVpnService : VpnService() {
     private var loopThread: Thread? = null
     private var forwarder: DnsForwarder? = null
     private var processor: DnsPacketProcessor? = null
+    private var relay: FlowRelay? = null
 
     /** DNS servers of the real (non-VPN) networks, kept fresh by a callback. */
     private val networkDns = ConcurrentHashMap<Network, Pair<Boolean, List<InetAddress>>>()
@@ -99,9 +109,11 @@ class NullRouteVpnService : VpnService() {
             app.settings.vpnWanted = true
             app.queryLog.clear()
             trackUnderlyingNetworks()
+            val s = app.settings.current
             processor = DnsPacketProcessor(
                 app.lists.matcher(), listOf(VIRTUAL_DNS_V4.address, VIRTUAL_DNS_V6.address),
-                dga = app.lists.dgaDetector(), blockSuspicious = app.settings.current.blockSuspicious,
+                dga = app.lists.dgaDetector(), blockSuspicious = s.blockSuspicious,
+                reputation = if (s.reputation) app.lists.reputationChecker() else null,
             )
             forwarder = DnsForwarder(
                 upstreams = ::upstreams,
@@ -123,6 +135,8 @@ class NullRouteVpnService : VpnService() {
     /** (Re)creates the tun interface; also used to apply excluded-app changes. */
     @Synchronized
     private fun establish() {
+        val full = app.settings.current.fullTunnel
+        processor!!.anyResolver = full
         val builder = Builder()
             .setSession(getString(R.string.app_name))
             .setMtu(1500)
@@ -136,6 +150,11 @@ class NullRouteVpnService : VpnService() {
             .setConfigureIntent(
                 PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
             )
+        if (full) {
+            builder.addRoute("0.0.0.0", 0).addRoute("::", 0)
+            // Our own list/shard downloads must not loop back through the relay.
+            runCatching { builder.addDisallowedApplication(packageName) }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false) // follow the real network
         for (pkg in app.settings.current.excludedApps) {
             try {
@@ -151,7 +170,15 @@ class NullRouteVpnService : VpnService() {
         val oldLoop = loop
         tun = newTun
         tunOut = FileOutputStream(newTun.fileDescriptor)
-        val newLoop = TunnelLoop(FileInputStream(newTun.fileDescriptor), processor!!, ::handle)
+        relay?.stop()
+        relay = if (full) FlowRelay(
+            writeToTunnel = ::writePacket,
+            protectTcp = { protect(it) },
+            protectUdp = { protect(it) },
+            isBlocked = { host -> processor?.matcher?.verdict(host)?.blocked == true },
+            onBlocked = ::recordConnection,
+        ).also { it.start() } else null
+        val newLoop = TunnelLoop(FileInputStream(newTun.fileDescriptor), processor!!, ::handle, relay)
         loop = newLoop
         loopThread = Thread({
             try {
@@ -178,6 +205,21 @@ class NullRouteVpnService : VpnService() {
     private fun record(event: QueryEvent) {
         app.queryLog.add(event)
         if (event.verdict.blocked) pendingBlocked.incrementAndGet()
+    }
+
+    /** A connection refused by its TLS SNI / HTTP Host in full-tunnel mode. */
+    private fun recordConnection(e: FlowRelay.ConnectionEvent) {
+        val event = QueryEvent(System.currentTimeMillis(), e.host, 0, Verdict.BLOCKED_BY_SNI)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            event.uid = runCatching {
+                connectivity.getConnectionOwnerUid(
+                    OsConstants.IPPROTO_TCP,
+                    InetSocketAddress(InetAddress.getByAddress(e.source), e.sourcePort),
+                    InetSocketAddress(InetAddress.getByAddress(e.destination), e.destinationPort),
+                )
+            }.getOrDefault(-1)
+        }
+        record(event)
     }
 
     /** Attribute the query to an app (Android 10+, VPN apps only). */
@@ -207,6 +249,7 @@ class NullRouteVpnService : VpnService() {
             processor?.matcher = app.lists.matcher()
             processor?.dga = app.lists.dgaDetector()
             processor?.blockSuspicious = app.settings.current.blockSuspicious
+            processor?.reputation = if (app.settings.current.reputation) app.lists.reputationChecker() else null
         } catch (e: Exception) {
             Log.e(TAG, "reload failed", e)
         }
@@ -306,6 +349,8 @@ class NullRouteVpnService : VpnService() {
     // ---- teardown -------------------------------------------------------------
     private fun shutdown(keepState: Boolean = false) {
         loop?.stop()
+        relay?.stop()
+        relay = null
         runCatching { tun?.close() }
         tun = null
         tunOut = null

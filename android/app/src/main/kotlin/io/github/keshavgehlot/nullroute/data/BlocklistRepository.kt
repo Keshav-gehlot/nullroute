@@ -4,6 +4,8 @@ import android.content.Context
 import io.github.keshavgehlot.nullroute.BuildConfig
 import io.github.keshavgehlot.nullroute.core.DgaDetector
 import io.github.keshavgehlot.nullroute.core.DomainMatcher
+import io.github.keshavgehlot.nullroute.core.PrefixSet
+import io.github.keshavgehlot.nullroute.core.ReputationChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -16,7 +18,7 @@ import java.net.URL
 import java.security.MessageDigest
 
 /**
- * Provides the domain matcher used by the VPN.
+ * Provides the domain matcher, DGA model and reputation checker used by the VPN.
  *
  * Lists ship inside the APK (assets/lists) so blocking works offline from the
  * first launch. Updates are fetched from the project's `lists` branch, which
@@ -42,6 +44,24 @@ class BlocklistRepository(private val context: Context, private val settings: Se
         }.also { dga = it }
     }
 
+    private var reputation: ReputationChecker? = null
+
+    /**
+     * Phishing/malware reputation: a local hash-prefix set (bundled, refreshed
+     * with the lists) plus shards fetched from the lists branch only on a
+     * local prefix hit. Null if the data is missing.
+     */
+    suspend fun reputationChecker(): ReputationChecker? = mutex.withLock {
+        reputation ?: withContext(Dispatchers.IO) {
+            open("prefixes.rice")?.use { input ->
+                runCatching { ReputationChecker(PrefixSet.decode(input.readBytes()), ::fetchShard) }.getOrNull()
+            }
+        }.also { reputation = it }
+    }
+
+    private fun fetchShard(name: String): ByteArray? =
+        runCatching { fetch(BuildConfig.LISTS_BRANCH_URL + "rep/shards/$name.bin") }.getOrNull()
+
     suspend fun matcher(): DomainMatcher = mutex.withLock {
         val b = blocked ?: load().also { blocked = it }
         val s = settings.current
@@ -63,27 +83,29 @@ class BlocklistRepository(private val context: Context, private val settings: Se
 
     /** Downloads newer lists if available. Safe to call from a worker or the UI. */
     suspend fun update(): UpdateResult = withContext(Dispatchers.IO) {
-        val base = BuildConfig.LISTS_BASE_URL
-        val report = JSONObject(String(fetch(base.removeSuffix("dns/") + "report.json")))
+        val report = JSONObject(String(fetch(BuildConfig.LISTS_BRANCH_URL + "report.json")))
         val version = report.getString("generatedAt")
         val files = report.getJSONObject("files")
         if (version == settings.current.listsVersion && File(dir, "blocklist.txt").exists()) {
             return@withContext UpdateResult(false, domainCount, version)
         }
-        for (name in listOf("blocklist.txt", "allowlist.txt", "cname_targets.txt", "dga_model.txt")) {
-            val expected = files.optString("dns/$name").ifEmpty { null } ?: continue
-            val bytes = fetch(base + name)
+        for ((path, name) in listOf("dns/blocklist.txt", "dns/allowlist.txt", "dns/cname_targets.txt",
+            "dns/dga_model.txt", "rep/prefixes.rice").map { it to it.substringAfter('/') }) {
+            val expected = files.optString(path).ifEmpty { null } ?: continue
+            val bytes = fetch(BuildConfig.LISTS_BRANCH_URL + path)
             val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
             if (!actual.equals(expected, ignoreCase = true)) throw IOException("Checksum mismatch for $name")
             val tmp = File(dir, "$name.tmp")
             tmp.writeBytes(bytes)
+            if (name == "prefixes.rice") runCatching { PrefixSet.decode(bytes) }
+                .onFailure { throw IOException("Downloaded reputation data is corrupt") }
             if (name == "blocklist.txt") {
                 val count = tmp.bufferedReader().use { DomainMatcher.readList(it).size }
                 if (count < 10_000) throw IOException("Downloaded list looks incomplete ($count domains)")
             }
             if (!tmp.renameTo(File(dir, name))) throw IOException("Could not save $name")
         }
-        mutex.withLock { blocked = null; dga = null }
+        mutex.withLock { blocked = null; dga = null; reputation = null }
         val count = matcher().size
         settings.setListsUpdated(System.currentTimeMillis(), version)
         UpdateResult(true, count, version)

@@ -13,13 +13,20 @@ two-tier structure Google Safe Browsing's Update API uses:
    was asked for — and only for names whose 32-bit prefix already matched a
    known-bad domain (about 1 in 2,000 clean names, by chance).
 
+Shards are always fetched fresh, so a device whose prefix set is a day old
+still gets current answers: a domain since removed from the feeds misses in
+the shard and is allowed. Shards aren't pinned to a hash manifest because the
+manifest would come from the same HTTPS origin as the shards (no extra
+security), and pinning would make every shard fail verification as soon as
+the lists branch moved on. Clients instead check each shard's structure: a
+multiple of 8 bytes, strictly sorted, every entry in the requested bucket.
+
 A lookup for ``a.b.example.com`` checks ``a.b.example.com``, ``b.example.com``
 and ``example.com``: a listed domain covers its subdomains, as in the feeds.
 
 Files written under ``dist/rep/``:
 
     prefixes.rice       b"NRP1" | u32 count | u8 k | u32 first | Rice-coded gaps
-    shard_hashes.bin    4096 x 16 bytes: truncated SHA-256 of each shard file
     shards/XYZ.bin      sorted 8-byte big-endian hash heads, XYZ = first 12 bits
     meta.json           counts, sources, format description
 """
@@ -37,7 +44,6 @@ MAGIC = b"NRP1"
 SHARD_BITS = 12
 SHARDS = 1 << SHARD_BITS
 HEAD_BYTES = 8           # bytes of SHA-256 kept per entry in a shard
-SHARD_HASH_BYTES = 16    # bytes of each shard file's SHA-256 kept in shard_hashes.bin
 MIN_LABELS = 2           # never hash a bare TLD
 
 
@@ -162,15 +168,11 @@ def build(domains: list[str], out: Path) -> dict:
     buckets: list[list[bytes]] = [[] for _ in range(SHARDS)]
     for h in hashes:
         buckets[shard_of(h)].append(h[:HEAD_BYTES])
-    shard_digests = bytearray()
     sizes = []
     for i, bucket in enumerate(buckets):
         data = b"".join(sorted(set(bucket)))
         (rep / "shards" / f"{shard_name(i)}.bin").write_bytes(data)
-        shard_digests += hashlib.sha256(data).digest()[:SHARD_HASH_BYTES]
         sizes.append(len(data) // HEAD_BYTES)
-    (rep / "shard_hashes.bin").write_bytes(bytes(shard_digests))
-    files["rep/shard_hashes.bin"] = hashlib.sha256(bytes(shard_digests)).hexdigest()
 
     stats = {
         "domains": len(domains), "hashes": len(hashes), "prefixes": len(prefixes),
@@ -183,6 +185,15 @@ def build(domains: list[str], out: Path) -> dict:
     return {"files": files, "stats": stats}
 
 
+def valid_shard(index: int, data: bytes) -> bool:
+    """Structural check every client applies: sorted 8-byte heads, all in the requested bucket."""
+    if len(data) % HEAD_BYTES:
+        return False
+    heads = [data[j:j + HEAD_BYTES] for j in range(0, len(data), HEAD_BYTES)]
+    return all(a < b for a, b in zip(heads, heads[1:])) and \
+        all(int.from_bytes(h[:4], "big") >> (32 - SHARD_BITS) == index for h in heads)
+
+
 def is_listed(host: str, prefixes: list[int], fetch_shard) -> str | None:
     """Reference client used by tests: returns the matching expression or None."""
     import bisect
@@ -192,8 +203,11 @@ def is_listed(host: str, prefixes: list[int], fetch_shard) -> str | None:
         i = bisect.bisect_left(prefixes, p)
         if i == len(prefixes) or prefixes[i] != p:
             continue
-        data = fetch_shard(shard_name(shard_of(h)))
-        heads = {data[j:j + HEAD_BYTES] for j in range(0, len(data), HEAD_BYTES)}
+        index = shard_of(h)
+        data = fetch_shard(shard_name(index))
+        heads = [data[j:j + HEAD_BYTES] for j in range(0, len(data), HEAD_BYTES)]
+        if not valid_shard(index, data):
+            raise ValueError(f"malformed shard {shard_name(index)}")
         if h[:HEAD_BYTES] in heads:
             return expr
     return None

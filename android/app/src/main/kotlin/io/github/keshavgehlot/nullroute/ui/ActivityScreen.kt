@@ -134,6 +134,12 @@ fun ActivityScreen(app: NullRouteApp, modifier: Modifier) {
                         Verdict.BLOCKED_BY_HEURISTIC ->
                             "This name is on no list, but it looks machine-generated — a pattern used by " +
                                 "malware and throwaway tracking domains. You turned on blocking for these."
+                        Verdict.BLOCKED_BY_REPUTATION ->
+                            "${e.reputationMatch ?: "This domain"} is on a phishing, scam or malware feed " +
+                                "(HaGeZi Threat Intelligence / Phishing.Database). Only allow it if you're sure it's safe."
+                        Verdict.BLOCKED_BY_SNI ->
+                            "An app connected to this site without a normal DNS lookup (its own resolver or a " +
+                                "hard-coded address). NullRoute read the site name from the connection and blocked it."
                         Verdict.DOH_CANARY ->
                             "Firefox checks this name to decide whether to bypass system DNS. " +
                                 "NullRoute answers \"doesn't exist\" so Firefox stays filtered."
@@ -168,6 +174,8 @@ private fun verdictLabel(v: Verdict) = when (v) {
     Verdict.DOH_CANARY -> "DoH check"
     Verdict.BLOCKED_BY_HEURISTIC -> "Blocked (generated)"
     Verdict.BLOCKED_BY_USER -> "Blocked (you)"
+    Verdict.BLOCKED_BY_REPUTATION -> "Blocked (dangerous)"
+    Verdict.BLOCKED_BY_SNI -> "Blocked (connection)"
     Verdict.ALLOWED_BY_USER -> "Allowed (you)"
     Verdict.ALLOWED_BY_LIST, Verdict.ALLOWED -> "Allowed"
 }
