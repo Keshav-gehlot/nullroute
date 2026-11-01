@@ -315,6 +315,8 @@ A failed test in CI stops the publish, so a list update that would block an esse
 - **Per-app attribution**, excluded apps (for banking apps that break), a choice of resolver (network default, Cloudflare, Quad9, Google), a Quick Settings tile, Always-on VPN support and restore after reboot.
 - **Verified list updates** daily on Wi-Fi, with SHA-256 checks against `report.json` and an atomic swap that keeps the tunnel up.
 - **Private DNS detection.** Warns when Android's Private DNS is in strict mode, which would silently bypass any DNS filter.
+- **Avoiding ad-blocker detection.** Sites and video players (JW Player error 232011) check whether their ad *loader* arrived. By default the app lets exactly 7 loader hostnames resolve (`compiler/data/antiadblock-compat.txt`) while the servers that deliver ads, all trackers and Google's "turn off your ad blocker" prompt stay blocked; or only for apps you choose, or never.
+- **NullRoute Browser** (Browse tab). A WebView where NullRoute sees full URLs, so it does what DNS can't: serves original stand-in scripts for AdSense, Google Publisher Tag and the IMA video-ad SDK (players get "no ads" and play the content), applies generic element hiding, removes ad-blocker walls by their message rather than their randomised names, and blocks pop-up windows and `intent:` redirects.
 
 ### 4. iOS app — `ios/` (SwiftUI)
 

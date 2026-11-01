@@ -57,8 +57,8 @@ jobs:
         run: |
           pip install pytest playwright
           python -m playwright install --with-deps chromium
-      - name: Unit tests (per-site controls, reputation, cross-site detector)
-        run: node --test extension/tests/*.test.mjs
+      - name: Unit tests (per-site controls, reputation, cross-site detector, browser stand-ins)
+        run: node --test extension/tests/*.test.mjs android/web-tests/*.test.mjs
       - name: End-to-end tests
         run: python -m pytest extension/tests -v
       - name: Package
