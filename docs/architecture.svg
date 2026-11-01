@@ -1,11 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 870" width="1280" height="870" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 940" width="1280" height="940" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title>NullRoute architecture</title>
-  <desc>Filter lists are compiled by a Python compiler into native rule formats for a Chrome MV3 extension, an Android VpnService DNS sinkhole and iOS Safari content blockers. CI publishes verified list updates.</desc>
+  <desc>Filter lists and threat feeds are compiled by a Python compiler into native rule formats and a hash-prefix reputation set for a Chrome MV3 extension, an Android VpnService (DNS sinkhole with optional full-tunnel SNI inspection) and iOS Safari content blockers. CI publishes verified list updates; reputation shards are fetched only on a local prefix hit.</desc>
   <style>
     .bg { fill: #ffffff; }
     .panel { fill: #f6f8fa; stroke: #d0d7de; }
     .box { fill: #ffffff; stroke: #8c959f; }
     .src { fill: #fff8c5; stroke: #d4a72c; }
+    .threat { fill: #ffebe9; stroke: #cf222e; }
     .dim { fill: #ffffff; stroke: #8c959f; stroke-dasharray: 5 4; }
     .chrome { fill: #ddf4ff; stroke: #54aeff; }
     .android { fill: #dafbe1; stroke: #4ac26b; }
@@ -25,6 +26,7 @@
       .panel { fill: #161b22; stroke: #30363d; }
       .box, .dim { fill: #0d1117; stroke: #6e7681; }
       .src { fill: #272115; stroke: #9e6a03; }
+      .threat { fill: #2d1214; stroke: #da3633; }
       .chrome { fill: #0c2d4a; stroke: #1f6feb; }
       .android { fill: #0f2a19; stroke: #2ea043; }
       .ios { fill: #2a1a3e; stroke: #8957e5; }
@@ -43,29 +45,33 @@
     <marker id="u" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahu" d="M0,0 L10,5 L0,10 z"/></marker>
   </defs>
 
-  <rect class="bg" x="0" y="0" width="1280" height="870"/>
+  <rect class="bg" x="0" y="0" width="1280" height="940"/>
   <text class="title" x="30" y="44">NullRoute — one compiler, three OS-enforced blockers</text>
 
   <!-- ============ 1. Sources ============ -->
-  <text class="h" x="30" y="90">① Filter sources</text>
-  <rect class="src" x="30" y="106" width="210" height="52" rx="8"/>
-  <text class="t" x="42" y="128">EasyList</text><text class="s" x="42" y="146">ads · ABP syntax</text>
-  <rect class="src" x="30" y="170" width="210" height="52" rx="8"/>
-  <text class="t" x="42" y="192">EasyPrivacy</text><text class="s" x="42" y="210">trackers</text>
-  <rect class="src" x="30" y="234" width="210" height="52" rx="8"/>
-  <text class="t" x="42" y="256">uBlock filters</text><text class="s" x="42" y="274">+js scriptlets · $removeparam</text>
-  <rect class="src" x="30" y="298" width="210" height="52" rx="8"/>
-  <text class="t" x="42" y="320">AdGuard CNAME trackers</text><text class="s" x="42" y="338"><tspan class="num">300k</tspan> cloaked subdomains</text>
-  <rect class="src" x="30" y="362" width="210" height="52" rx="8"/>
-  <text class="t" x="42" y="384">StevenBlack hosts</text><text class="s" x="42" y="402">malware · ad hosts</text>
-  <rect class="dim" x="30" y="426" width="210" height="64" rx="8"/>
-  <text class="t" x="42" y="448">Top-1M + DGA dataset</text><text class="s" x="42" y="465">train / evaluate the bigram</text><text class="s" x="42" y="480">model only — not shipped</text>
-  <text class="s" x="30" y="516"><tspan class="num">~526,000</tspan> source lines</text>
+  <text class="h" x="30" y="90">① Sources</text>
+  <rect class="src" x="30" y="106" width="210" height="48" rx="8"/>
+  <text class="t" x="42" y="126">EasyList</text><text class="s" x="42" y="143">ads · ABP syntax</text>
+  <rect class="src" x="30" y="164" width="210" height="48" rx="8"/>
+  <text class="t" x="42" y="184">EasyPrivacy</text><text class="s" x="42" y="201">trackers</text>
+  <rect class="src" x="30" y="222" width="210" height="48" rx="8"/>
+  <text class="t" x="42" y="242">uBlock filters</text><text class="s" x="42" y="259">+js scriptlets · $removeparam</text>
+  <rect class="src" x="30" y="280" width="210" height="48" rx="8"/>
+  <text class="t" x="42" y="300">AdGuard CNAME trackers</text><text class="s" x="42" y="317"><tspan class="num">300k</tspan> cloaked subdomains</text>
+  <rect class="src" x="30" y="338" width="210" height="48" rx="8"/>
+  <text class="t" x="42" y="358">StevenBlack hosts</text><text class="s" x="42" y="375">malware · ad hosts</text>
+  <rect class="threat" x="30" y="396" width="210" height="64" rx="8"/>
+  <text class="t" x="42" y="416">Threat feeds</text><text class="s" x="42" y="433">HaGeZi TIF · Phishing.Database</text><text class="s" x="42" y="449"><tspan class="num">2.2M</tspan> phishing/scam/malware</text>
+  <rect class="dim" x="30" y="470" width="210" height="64" rx="8"/>
+  <text class="t" x="42" y="490">Top-1M + DGA dataset</text><text class="s" x="42" y="507">train / evaluate the bigram</text><text class="s" x="42" y="523">model — not shipped</text>
+  <rect class="dim" x="30" y="544" width="210" height="64" rx="8"/>
+  <text class="t" x="42" y="564">DuckDuckGo Tracker Radar</text><text class="s" x="42" y="581">evaluates a tracker classifier</text><text class="s" x="42" y="597">(rejected) — not shipped</text>
+  <text class="s" x="30" y="634"><tspan class="num">~529k</tspan> filter lines + <tspan class="num">2.4M</tspan> feed lines</text>
 
-  <path class="edge" d="M240,300 L284,300" marker-end="url(#a)"/>
+  <path class="edge" d="M240,330 L284,330" marker-end="url(#a)"/>
 
   <!-- ============ 2. Compiler ============ -->
-  <rect class="panel" x="288" y="70" width="336" height="556" rx="12"/>
+  <rect class="panel" x="288" y="70" width="336" height="652" rx="12"/>
   <text class="h" x="304" y="96">② Compiler — compiler/ (Python)</text>
 
   <rect class="box" x="304" y="112" width="304" height="52" rx="8"/>
@@ -75,7 +81,7 @@
 
   <rect class="box" x="304" y="180" width="304" height="52" rx="8"/>
   <text class="t" x="316" y="202">Fold ||domain^ → requestDomains</text>
-  <text class="s" x="316" y="220"><tspan class="num">~480k</tspan> filters → <tspan class="num">14,025</tspan> DNR rules</text>
+  <text class="s" x="316" y="220"><tspan class="num">~480k</tspan> filters → <tspan class="num">14,026</tspan> DNR rules</text>
   <path class="edge" d="M456,232 L456,246" marker-end="url(#a)"/>
 
   <rect class="box" x="304" y="248" width="304" height="112" rx="8"/>
@@ -90,116 +96,135 @@
   <text class="t" x="316" y="398">Per-platform targets → dist/</text>
   <text class="s" x="316" y="420">chrome/  6 DNR rulesets</text>
   <text class="s" x="316" y="438">cosmetic/  <tspan class="num">13.7k</tspan> generic + <tspan class="num">17.5k</tspan> site CSS</text>
-  <text class="s" x="316" y="456">scriptlets/  <tspan class="num">2,726</tspan> rules on 2,073 sites</text>
+  <text class="s" x="316" y="456">scriptlets/  <tspan class="num">2,731</tspan> rules on 2,077 sites</text>
   <text class="s" x="316" y="474">params/  click-ID stripping</text>
   <text class="s" x="316" y="492">safari/  4 WebKit JSON lists</text>
-  <text class="s" x="316" y="510">dns/  <tspan class="num">122.7k</tspan> domains + 98 CNAME targets</text>
+  <text class="s" x="316" y="510">dns/  <tspan class="num">124k</tspan> domains + 98 CNAME targets</text>
   <text class="s" x="316" y="528">dns/dga_model.txt  bigram table</text>
   <path class="edge" d="M456,546 L456,560" marker-end="url(#a)"/>
 
-  <rect class="box" x="304" y="562" width="304" height="48" rx="8"/>
-  <text class="t" x="316" y="582">report.json</text>
-  <text class="s" x="316" y="599">counts, skips, SHA-256 of every output file</text>
+  <rect class="threat" x="304" y="562" width="304" height="64" rx="8"/>
+  <text class="t" x="316" y="582">rep/  privacy-preserving reputation</text>
+  <text class="s" x="316" y="599">32-bit SHA-256 prefixes, Rice-coded: <tspan class="num">3.4 MB</tspan></text>
+  <text class="s" x="316" y="615">+ 4,096 shards of 64-bit hash heads</text>
+  <path class="edge" d="M456,626 L456,640" marker-end="url(#a)"/>
+
+  <rect class="box" x="304" y="642" width="304" height="48" rx="8"/>
+  <text class="t" x="316" y="662">report.json</text>
+  <text class="s" x="316" y="679">counts, skips, SHA-256 of every list file</text>
 
   <!-- ============ 3. CI ============ -->
-  <rect class="ci" x="30" y="656" width="594" height="136" rx="12"/>
-  <text class="h" x="46" y="682">③ GitHub Actions</text>
-  <text class="t" x="46" y="708">ci.yml</text><text class="s" x="140" y="708">67 compiler · 8 node · 21 Chromium e2e · 33 Kotlin tests, APK + iOS build</text>
-  <text class="t" x="46" y="734">lists.yml</text><text class="s" x="140" y="734">daily recompile → publishes dist/ + report.json to the lists branch</text>
-  <text class="t" x="46" y="760">release.yml</text><text class="s" x="140" y="760">signed APK + extension zip attached to every tag</text>
-  <text class="s" x="46" y="780">Canary or budget failure blocks the update.</text>
-  <path class="edge" d="M456,610 L456,652" marker-end="url(#a)"/>
+  <rect class="ci" x="30" y="742" width="594" height="134" rx="12"/>
+  <text class="h" x="46" y="768">③ GitHub Actions</text>
+  <text class="t" x="46" y="794">ci.yml</text><text class="s" x="140" y="794">73 compiler · 16 node · 23 Chromium e2e · 53 Kotlin tests, APK + iOS build</text>
+  <text class="t" x="46" y="820">lists.yml</text><text class="s" x="140" y="820">daily recompile → publishes dist/ + report.json to the lists branch</text>
+  <text class="t" x="46" y="846">release.yml</text><text class="s" x="140" y="846">signed APK + extension zip attached to every tag</text>
+  <text class="s" x="46" y="866">Canary or budget failure blocks the update.</text>
+  <path class="edge" d="M456,690 L456,738" marker-end="url(#a)"/>
 
   <!-- ============ Chrome ============ -->
-  <rect class="panel" x="680" y="70" width="570" height="262" rx="12"/>
+  <rect class="panel" x="680" y="70" width="570" height="352" rx="12"/>
   <text class="h" x="696" y="96">Chrome extension — extension/ (Manifest V3)</text>
-  <rect class="chrome" x="696" y="112" width="168" height="200" rx="8"/>
+  <rect class="chrome" x="696" y="112" width="168" height="294" rx="8"/>
   <text class="t" x="708" y="136">Service worker</text>
   <text class="s" x="708" y="156">background.js</text>
-  <text class="s" x="708" y="180">shields.js — global</text>
-  <text class="s" x="708" y="196">defaults + per-site</text>
-  <text class="s" x="708" y="212">overrides</text>
-  <text class="s" x="708" y="236">userfilters.js</text>
-  <text class="s" x="708" y="252">cosmetic.js</text>
-  <text class="s" x="708" y="276">state survives restarts</text>
-  <text class="s" x="708" y="292">via storage.session</text>
+  <text class="s" x="708" y="182">shields.js — global</text>
+  <text class="s" x="708" y="198">defaults + per-site</text>
+  <text class="s" x="708" y="214">overrides</text>
+  <text class="s" x="708" y="240">reputation.js — prefix</text>
+  <text class="s" x="708" y="256">set + shard client</text>
+  <text class="s" x="708" y="282">xsite.js — cross-site</text>
+  <text class="s" x="708" y="298">ID detector</text>
+  <text class="s" x="708" y="324">userfilters · cosmetic</text>
+  <text class="s" x="708" y="350">never sees request URLs</text>
+  <text class="s" x="708" y="366">it doesn't need to block</text>
 
-  <rect class="box" x="890" y="112" width="344" height="58" rx="8"/>
-  <text class="t" x="902" y="134">declarativeNetRequest</text>
-  <text class="s" x="902" y="152">6 static rulesets · dynamic: aggressive, cookie</text>
-  <text class="s" x="902" y="166">stripping, allowlist (prio 100), my filters</text>
-  <rect class="box" x="890" y="178" width="344" height="44" rx="8"/>
-  <text class="t" x="902" y="197">scripting</text>
-  <text class="s" x="902" y="214">USER-origin CSS · MAIN-world scriptlets · farbling</text>
-  <rect class="box" x="890" y="230" width="344" height="36" rx="8"/>
-  <text class="s" x="902" y="253">contentSettings.javascript · browsingData.remove</text>
-  <rect class="box" x="890" y="274" width="344" height="38" rx="8"/>
-  <text class="s" x="902" y="298">Popup · Options · Element picker (closed shadow DOM)</text>
-  <path class="edge" d="M864,141 L886,141" marker-end="url(#a)"/>
-  <path class="edge" d="M864,200 L886,200" marker-end="url(#a)"/>
-  <path class="edge" d="M864,248 L886,248" marker-end="url(#a)"/>
-  <path class="edge" d="M886,293 L864,293" marker-end="url(#a)"/>
+  <rect class="box" x="890" y="112" width="344" height="56" rx="8"/>
+  <text class="t" x="902" y="132">declarativeNetRequest</text>
+  <text class="s" x="902" y="149">6 static rulesets · dynamic: aggressive, cookie</text>
+  <text class="s" x="902" y="163">stripping, allowlist (prio 100), my filters, xsite</text>
+  <rect class="box" x="890" y="176" width="344" height="40" rx="8"/>
+  <text class="t" x="902" y="193">scripting</text>
+  <text class="s" x="902" y="209">USER-origin CSS · MAIN-world scriptlets · farbling</text>
+  <rect class="box" x="890" y="224" width="344" height="30" rx="8"/>
+  <text class="s" x="902" y="243">contentSettings.javascript · browsingData.remove</text>
+  <rect class="threat" x="890" y="262" width="344" height="44" rx="8"/>
+  <text class="t" x="902" y="280">webNavigation → reputation check</text>
+  <text class="s" x="902" y="297">local prefix hit → interstitial → warning page</text>
+  <rect class="box" x="890" y="314" width="344" height="44" rx="8"/>
+  <text class="t" x="902" y="332">webRequest (observe only)</text>
+  <text class="s" x="902" y="349">same ID from 2 sites → flag; block is opt-in</text>
+  <rect class="box" x="890" y="366" width="344" height="40" rx="8"/>
+  <text class="s" x="902" y="390">Popup · Options · Element picker (closed shadow DOM)</text>
+  <path class="edge" d="M864,140 L886,140" marker-end="url(#a)"/>
+  <path class="edge" d="M864,196 L886,196" marker-end="url(#a)"/>
+  <path class="edge" d="M864,239 L886,239" marker-end="url(#a)"/>
+  <path class="edge" d="M886,284 L864,284" marker-end="url(#a)"/>
+  <path class="edge" d="M886,336 L864,336" marker-end="url(#a)"/>
+  <path class="edge" d="M886,386 L864,386" marker-end="url(#a)"/>
 
   <!-- ============ Android ============ -->
-  <rect class="panel" x="680" y="350" width="570" height="262" rx="12"/>
-  <text class="h" x="696" y="376">Android app — android/ (Kotlin, Compose)</text>
-  <rect class="android" x="696" y="392" width="106" height="52" rx="8"/>
-  <text class="t" x="708" y="414">Any app</text><text class="s" x="708" y="431">DNS lookup</text>
-  <rect class="android" x="826" y="392" width="126" height="52" rx="8"/>
-  <text class="t" x="838" y="414">VpnService tun</text><text class="s" x="838" y="431">DNS-only routes</text>
-  <rect class="android" x="976" y="392" width="126" height="52" rx="8"/>
-  <text class="t" x="988" y="414">Packet processor</text><text class="s" x="988" y="431">IP/UDP/DNS parse</text>
-  <rect class="android" x="1126" y="392" width="108" height="52" rx="8"/>
-  <text class="t" x="1138" y="414">Upstream</text><text class="s" x="1138" y="431">real resolver</text>
-  <path class="edge" d="M802,418 L822,418" marker-end="url(#a)"/>
-  <path class="edge" d="M952,418 L972,418" marker-end="url(#a)"/>
-  <path class="edge" d="M1102,412 L1122,412" marker-end="url(#a)"/>
-  <path class="edge" d="M1122,426 L1102,426" marker-end="url(#a)"/>
+  <rect class="panel" x="680" y="440" width="570" height="282" rx="12"/>
+  <text class="h" x="696" y="466">Android app — android/ (Kotlin, Compose)</text>
+  <rect class="android" x="696" y="482" width="106" height="52" rx="8"/>
+  <text class="t" x="708" y="504">Any app</text><text class="s" x="708" y="521">DNS / connection</text>
+  <rect class="android" x="826" y="482" width="126" height="52" rx="8"/>
+  <text class="t" x="838" y="504">VpnService tun</text><text class="s" x="838" y="521">DNS routes (or all)</text>
+  <rect class="android" x="976" y="482" width="126" height="52" rx="8"/>
+  <text class="t" x="988" y="504">Packet processor</text><text class="s" x="988" y="521">IP/UDP/DNS parse</text>
+  <rect class="android" x="1126" y="482" width="108" height="52" rx="8"/>
+  <text class="t" x="1138" y="504">Upstream</text><text class="s" x="1138" y="521">real resolver</text>
+  <path class="edge" d="M802,508 L822,508" marker-end="url(#a)"/>
+  <path class="edge" d="M952,508 L972,508" marker-end="url(#a)"/>
+  <path class="edge" d="M1102,502 L1122,502" marker-end="url(#a)"/>
+  <path class="edge" d="M1122,516 L1102,516" marker-end="url(#a)"/>
 
-  <rect class="box" x="826" y="462" width="408" height="66" rx="8"/>
-  <text class="t" x="838" y="482">Per-query decision</text>
-  <text class="s" x="838" y="500">suffix match <tspan class="num">~230 ns</tspan> · CNAME-chain uncloak on every answer</text>
-  <text class="s" x="838" y="517">DGA bigram flag (block opt-in) · DoH canary → NXDOMAIN</text>
-  <path class="edge" d="M1039,444 L1039,458" marker-end="url(#a)"/>
+  <rect class="box" x="826" y="550" width="408" height="68" rx="8"/>
+  <text class="t" x="838" y="570">Per-query decision (in memory, logged per app)</text>
+  <text class="s" x="838" y="588">suffix match <tspan class="num">~230 ns</tspan> · CNAME-chain uncloak · DoH canary</text>
+  <text class="s" x="838" y="605">DGA bigram flag · reputation: prefix hit → shard, in parallel</text>
+  <path class="edge" d="M1039,534 L1039,546" marker-end="url(#a)"/>
 
-  <rect class="box" x="696" y="546" width="256" height="50" rx="8"/>
-  <text class="t" x="708" y="567">Query log → Compose UI</text>
-  <text class="s" x="708" y="584">in memory only · per-app attribution</text>
-  <rect class="box" x="978" y="546" width="256" height="50" rx="8"/>
-  <text class="t" x="990" y="567">List update worker</text>
-  <text class="s" x="990" y="584">SHA-256 verify · atomic hot swap</text>
-  <path class="edge" d="M900,528 L860,542" marker-end="url(#a)"/>
+  <rect class="threat" x="696" y="634" width="270" height="72" rx="8"/>
+  <text class="t" x="708" y="654">Full tunnel (opt-in): FlowRelay</text>
+  <text class="s" x="708" y="672">userspace TCP/UDP relay reads TLS SNI /</text>
+  <text class="s" x="708" y="688">HTTP Host → RST if blocked · QUIC dropped</text>
+  <path class="edge" d="M860,534 L860,542 L812,542 L812,630" marker-end="url(#a)"/>
+  <rect class="box" x="978" y="634" width="256" height="72" rx="8"/>
+  <text class="t" x="990" y="654">List update worker</text>
+  <text class="s" x="990" y="672">daily · SHA-256 verify · atomic swap</text>
+  <text class="s" x="990" y="688">without dropping the tunnel</text>
 
   <!-- ============ iOS ============ -->
-  <rect class="panel" x="680" y="630" width="570" height="162" rx="12"/>
-  <text class="h" x="696" y="656">iOS app — ios/ (SwiftUI)</text>
-  <rect class="ios" x="696" y="672" width="150" height="54" rx="8"/>
-  <text class="t" x="708" y="694">Host app</text><text class="s" x="708" y="711">allowlist · updates</text>
-  <rect class="ios" x="870" y="672" width="140" height="54" rx="8"/>
-  <text class="t" x="882" y="694">App Group</text><text class="s" x="882" y="711">shared JSON lists</text>
-  <rect class="ios" x="1034" y="672" width="200" height="54" rx="8"/>
-  <text class="t" x="1046" y="694">4 content blockers</text><text class="s" x="1046" y="711">ads · privacy · hosts · cosmetic</text>
-  <path class="edge" d="M846,699 L866,699" marker-end="url(#a)"/>
-  <path class="edge" d="M1010,699 L1030,699" marker-end="url(#a)"/>
-  <rect class="box" x="1034" y="740" width="200" height="38" rx="8"/>
-  <text class="s" x="1046" y="763">Safari's WebKit enforces rules</text>
-  <path class="edge" d="M1134,726 L1134,736" marker-end="url(#a)"/>
-  <text class="s" x="696" y="756">each list under WebKit's 150k-rule cap;</text>
-  <text class="s" x="696" y="772">allowlist spliced in as ignore-previous-rules</text>
+  <rect class="panel" x="680" y="740" width="570" height="136" rx="12"/>
+  <text class="h" x="696" y="766">iOS app — ios/ (SwiftUI)</text>
+  <rect class="ios" x="696" y="780" width="150" height="50" rx="8"/>
+  <text class="t" x="708" y="800">Host app</text><text class="s" x="708" y="817">allowlist · updates</text>
+  <rect class="ios" x="870" y="780" width="140" height="50" rx="8"/>
+  <text class="t" x="882" y="800">App Group</text><text class="s" x="882" y="817">shared JSON lists</text>
+  <rect class="ios" x="1034" y="780" width="200" height="50" rx="8"/>
+  <text class="t" x="1046" y="800">4 content blockers</text><text class="s" x="1046" y="817">ads · privacy · hosts · cosmetic</text>
+  <path class="edge" d="M846,805 L866,805" marker-end="url(#a)"/>
+  <path class="edge" d="M1010,805 L1030,805" marker-end="url(#a)"/>
+  <text class="s" x="696" y="852">each list under WebKit's 150k-rule cap; Safari's WebKit enforces them;</text>
+  <text class="s" x="696" y="868">allowlist spliced in as ignore-previous-rules</text>
 
   <!-- ============ build-time bundles ============ -->
-  <path class="edge" d="M608,430 L650,430 L650,200 L676,200" marker-end="url(#a)"/>
-  <path class="edge" d="M608,510 L660,510 L660,480 L676,480" marker-end="url(#a)"/>
-  <path class="edge" d="M608,492 L640,492 L640,690 L676,690" marker-end="url(#a)"/>
+  <path class="edge" d="M608,430 L650,430 L650,250 L676,250" marker-end="url(#a)"/>
+  <path class="edge" d="M608,594 L660,594 L660,580 L676,580" marker-end="url(#a)"/>
+  <path class="edge" d="M608,492 L640,492 L640,796 L692,796" marker-end="url(#a)"/>
 
   <!-- ============ runtime updates ============ -->
-  <path class="upd" d="M624,740 L668,740 L668,620 L1106,620 L1106,600" marker-end="url(#u)"/>
-  <path class="upd" d="M624,760 L668,760 L668,714 L692,714" marker-end="url(#u)"/>
+  <path class="upd" d="M624,800 L668,800 L668,728 L1106,728 L1106,710" marker-end="url(#u)"/>
+  <path class="upd" d="M624,824 L684,824 L684,818 L692,818" marker-end="url(#u)"/>
+  <path class="upd" d="M624,756 L672,756 L672,432 L780,432 L780,410" marker-end="url(#u)"/>
 
   <!-- ============ legend ============ -->
-  <line class="edge" x1="30" y1="830" x2="70" y2="830"/>
-  <text class="s" x="78" y="834">build-time data / call</text>
-  <line class="upd" x1="230" y1="830" x2="270" y2="830"/>
-  <text class="s" x="278" y="834">runtime list update, hash-verified against report.json</text>
-  <text class="s" x="640" y="834">Blocking always runs inside the browser or OS engine. No proxy, no servers, no analytics.</text>
+  <line class="edge" x1="30" y1="906" x2="70" y2="906"/>
+  <text class="s" x="78" y="910">build-time data / call</text>
+  <line class="upd" x1="230" y1="906" x2="270" y2="906"/>
+  <text class="s" x="278" y="910">runtime download from the lists branch (verified lists; shards only on a local prefix hit)</text>
+  <rect class="threat" x="830" y="898" width="14" height="14" rx="3"/>
+  <text class="s" x="852" y="910">threat / connection protection</text>
+  <text class="s" x="30" y="930">Blocking always runs inside the browser or OS engine. No proxy, no servers, no analytics.</text>
 </svg>

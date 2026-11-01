@@ -575,6 +575,10 @@ def test_dangerous_site_interstitial_with_private_lookup(browser, tmp_path):
     page.wait_for_url(re.compile(r"chrome-extension://.*/src/warning\.html"), timeout=10000)
     page.wait_for_selector('#card[data-state="danger"]', timeout=10000)
     assert "phish-login.test" in page.inner_text("#host")
+    shots = Path(__file__).parent / "screenshots"
+    shots.mkdir(exist_ok=True)
+    page.set_viewport_size({"width": 760, "height": 520})
+    page.screenshot(path=str(shots / "warning.png"))
     lookups = [h for h in Recorder.hits if h.startswith("lists.test")]
     assert lookups and all(re.fullmatch(r"lists\.test/lists/rep/shards/[0-9a-f]{3}\.bin", h) for h in lookups), \
         f"only an anonymous 12-bit bucket may be requested, got {lookups}"
@@ -614,6 +618,16 @@ def test_cross_site_tracker_detected_then_blocked(browser):
         time.sleep(0.2)
         status = settings(ctx, ext_id, {"type": "getCrossSiteStatus"})
     assert sorted(status["flagged"]["unlisted-tracker.test"]["sites"]) == ["first-site.test", "second-site.test"]
+    opts = ctx.new_page()
+    opts.goto(f"chrome-extension://{ext_id}/src/options.html")
+    opts.wait_for_selector("#xsiteList li strong")
+    assert "unlisted-tracker.test" in opts.inner_text("#xsiteList")
+    shots = Path(__file__).parent / "screenshots"
+    shots.mkdir(exist_ok=True)
+    opts.set_viewport_size({"width": 900, "height": 900})
+    opts.add_style_tag(content=".savebar{display:none!important}")
+    opts.locator('section[aria-labelledby="xsiteTitle"]').screenshot(path=str(shots / "options-crosssite.png"))
+    opts.close()
 
     # A benign third party whose IDs differ per site is never flagged.
     Recorder.dynamic = b'<html><body><img src="http://widgets.benign.test/v1/img?session=FIRSTk2m9x7q3w8"></body></html>'

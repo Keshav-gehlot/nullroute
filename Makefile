@@ -18,7 +18,7 @@ test-compiler:
 	cd compiler && python3 -m pytest -q
 
 test-extension: extension
-	node --test extension/tests/shields.test.mjs
+	node --test extension/tests/*.test.mjs
 	python3 -m pytest extension/tests -q
 
 test: test-compiler test-extension
