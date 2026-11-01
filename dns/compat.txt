@@ -1,0 +1,8 @@
+# Loader hosts unblocked to avoid ad-blocker detection; see compiler/data/antiadblock-compat.txt
+c.amazon-adsystem.com
+imasdk.googleapis.com
+pagead2.googlesyndication.com
+s0.2mdn.net
+securepubads.g.doubleclick.net
+static.doubleclick.net
+www.googletagservices.com

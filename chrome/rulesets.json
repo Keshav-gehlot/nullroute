@@ -1,0 +1,53 @@
+{
+ "generatedAt": "2026-11-01T10:33:32+00:00",
+ "rulesets": [
+  {
+   "id": "ads",
+   "name": "Ads",
+   "description": "EasyList: the standard ad-blocking list",
+   "enabled": true,
+   "path": "rulesets/rules_ads.json",
+   "rules": 3860
+  },
+  {
+   "id": "ublock",
+   "name": "Ads (uBlock fixes)",
+   "description": "uBlock filters: anti-adblock defusers, fixes for sites EasyList misses, and uBlock's own breakage fixes",
+   "enabled": true,
+   "path": "rulesets/rules_ublock.json",
+   "rules": 2150
+  },
+  {
+   "id": "privacy",
+   "name": "Trackers",
+   "description": "EasyPrivacy: analytics, beacons and fingerprinting scripts",
+   "enabled": true,
+   "path": "rulesets/rules_privacy.json",
+   "rules": 9161
+  },
+  {
+   "id": "cname",
+   "name": "Cloaked trackers",
+   "description": "First-party subdomains that secretly alias trackers (CNAME cloaking)",
+   "enabled": true,
+   "path": "rulesets/rules_cname.json",
+   "rules": 161
+  },
+  {
+   "id": "hosts",
+   "name": "Ad & malware hosts",
+   "description": "StevenBlack unified hosts: ad servers and malware domains",
+   "enabled": true,
+   "path": "rulesets/rules_hosts.json",
+   "rules": 42
+  },
+  {
+   "id": "params",
+   "name": "Link tracking",
+   "description": "Removes click IDs such as gclid and fbclid from links",
+   "enabled": true,
+   "path": "rulesets/rules_params.json",
+   "rules": 6
+  }
+ ]
+}

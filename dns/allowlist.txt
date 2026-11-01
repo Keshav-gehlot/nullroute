@@ -1,0 +1,9 @@
+# NullRoute DNS blocklist — generated 2026-11-01T10:33:32+00:00
+# Sources: https://raw.githubusercontent.com/easylist/easylist/gh-pages/easylist.txt, https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt, https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt, https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt, data/nullroute-unbreak.txt, https://raw.githubusercontent.com/easylist/easylist/gh-pages/easyprivacy.txt, https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+cbsi.map.fastly.net
+content.ingbank.pl
+coral.coralproject.net
+entitlements.jwplayer.com
+optout.networkadvertising.org
+stats.britishbaseball.org.uk
+wwwimage-tve.cbsstatic.com
