@@ -1,0 +1,454 @@
+{
+ "generatedAt": "2026-11-14T10:33:40+00:00",
+ "rulesets": {
+  "ads": {
+   "sources": [
+    {
+     "url": "https://raw.githubusercontent.com/easylist/easylist/gh-pages/easylist.txt",
+     "version": "202611141028",
+     "license": "GPL-3.0 / CC BY-SA 3.0",
+     "format": "abp"
+    }
+   ],
+   "parse": {
+    "lines": 78226,
+    "network": 49612,
+    "cosmetic": 23987,
+    "scriptlets": 0,
+    "hosts": 0,
+    "skipped": {
+     "network:option:popup": 2973,
+     "network:block-document": 565,
+     "cosmetic:wildcard-domain": 308,
+     "comment": 278,
+     "cosmetic:unsupported-selector": 178,
+     "network:regex": 23,
+     "network:option:rewrite": 7,
+     "network:option:csp": 4,
+     "cosmetic:extended": 4,
+     "network:wildcard-domain": 2
+    }
+   },
+   "chrome": {
+    "url_filter": 3687,
+    "folded": 45758,
+    "cosmetic_only": 167,
+    "rules": 3881
+   },
+   "safari": {
+    "rules": 95159,
+    "skipped": 10,
+    "over_limit": false
+   }
+  },
+  "ublock": {
+   "sources": [
+    {
+     "url": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
+     "version": "%timestamp%",
+     "license": "GPL-3.0",
+     "format": "abp"
+    },
+    {
+     "url": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt",
+     "version": "%timestamp%",
+     "license": "GPL-3.0",
+     "format": "abp"
+    },
+    {
+     "url": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt",
+     "version": "%timestamp%",
+     "license": "GPL-3.0",
+     "format": "abp"
+    },
+    {
+     "url": "data/nullroute-unbreak.txt",
+     "version": null,
+     "license": "GPL-3.0",
+     "format": "abp"
+    }
+   ],
+   "parse": {
+    "lines": 17591,
+    "network": 2336,
+    "cosmetic": 1535,
+    "scriptlets": 1810,
+    "hosts": 0,
+    "skipped": {
+     "comment": 8506,
+     "scriptlet:wildcard-domain": 633,
+     "scriptlet:unsupported": 473,
+     "network:option:ghide": 419,
+     "network:option:redirect": 415,
+     "cosmetic:unsupported-selector": 350,
+     "cosmetic:wildcard-domain": 332,
+     "network:option:badfilter": 205,
+     "network:option:redirect-rule": 183,
+     "network:wildcard-domain": 94,
+     "cosmetic:html-filter": 55,
+     "network:regex": 47,
+     "network:option:popup": 45,
+     "network:option:unknown": 42,
+     "network:option:replace": 34,
+     "network:option:csp": 25,
+     "network:option:doc": 15,
+     "network:option:from": 9,
+     "network:option:all": 8,
+     "network:removeparam-complex": 4,
+     "network:option:method": 2,
+     "network:option:rewrite": 2,
+     "network:option:to": 2,
+     "network:option:strict1p": 2,
+     "network:option:shide": 1,
+     "network:non-ascii": 1,
+     "network:option:inline-script": 1,
+     "network:option:permissions": 1,
+     "network:option:strict3p": 1
+    }
+   },
+   "chrome": {
+    "url_filter": 1857,
+    "folded": 469,
+    "removeparam": 10,
+    "rules": 2099
+   }
+  },
+  "privacy": {
+   "sources": [
+    {
+     "url": "https://raw.githubusercontent.com/easylist/easylist/gh-pages/easyprivacy.txt",
+     "version": "202611141028",
+     "license": "GPL-3.0 / CC BY-SA 3.0",
+     "format": "abp"
+    }
+   ],
+   "parse": {
+    "lines": 57423,
+    "network": 56567,
+    "cosmetic": 2,
+    "scriptlets": 12,
+    "hosts": 0,
+    "skipped": {
+     "comment": 772,
+     "network:option:redirect": 29,
+     "scriptlet:unsupported": 15,
+     "network:regex": 7,
+     "network:wildcard-domain": 4,
+     "cosmetic:unsupported-selector": 4,
+     "scriptlet:wildcard-domain": 3,
+     "network:option:csp": 2,
+     "network:option:document": 1,
+     "network:unscoped-empty": 1,
+     "network:option:rewrite": 1,
+     "network:option:method": 1,
+     "cosmetic:html-filter": 1,
+     "network:option:redirect-rule": 1
+    }
+   },
+   "chrome": {
+    "url_filter": 9015,
+    "folded": 47552,
+    "rules": 9245
+   },
+   "safari": {
+    "rules": 103905,
+    "skipped": 1,
+    "over_limit": false
+   }
+  },
+  "cname": {
+   "sources": [
+    {
+     "url": "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_disguised_trackers_justdomains.txt",
+     "version": null,
+     "license": "MIT",
+     "format": "hosts"
+    }
+   ],
+   "parse": {
+    "lines": 306632,
+    "network": 0,
+    "cosmetic": 0,
+    "scriptlets": 0,
+    "hosts": 306601,
+    "skipped": {
+     "hosts:other": 31
+    }
+   },
+   "chrome": {
+    "hosts": 306601,
+    "rules": 166
+   }
+  },
+  "hosts": {
+   "sources": [
+    {
+     "url": "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+     "version": "14 November 2026 02:04:47 (UTC)",
+     "license": "MIT",
+     "format": "hosts"
+    }
+   ],
+   "parse": {
+    "lines": 84130,
+    "network": 0,
+    "cosmetic": 0,
+    "scriptlets": 0,
+    "hosts": 77308,
+    "skipped": {
+     "hosts:other": 6814,
+     "hosts:invalid": 8
+    }
+   },
+   "chrome": {
+    "hosts": 77308,
+    "rules": 42
+   },
+   "safari": {
+    "rules": 41293,
+    "skipped": 0,
+    "over_limit": false
+   }
+  },
+  "params": {
+   "chrome": {
+    "rules": 6,
+    "global_params": 33,
+    "scoped_patterns": 1,
+    "exceptions": 2,
+    "skipped": 7
+   }
+  }
+ },
+ "files": {
+  "chrome/cosmetic.json": "5052614119421308863a21a225f866837ea5a3aa70f09df2254e4e6cc7bcc85a",
+  "web/generic.css": "a5b41254e9705befc4ee3034a0e6595bcc553d934cd00e9239fc62b3f3152eae",
+  "web/generic-excluded.txt": "273a9fea0f4b64443e2b41742477a9d700192ba7a527b1e5011fcd8e5dc2f403",
+  "chrome/rules_ads.json": "7ca37e9762a56d756566eec416078f80295189039b775ee5e1a056bde55338a3",
+  "chrome/rules_ublock.json": "18cb161c2b93bd8e56b6c61863507514a1dd53bbe65367db3486033d9e8692f3",
+  "chrome/rules_privacy.json": "6faa0845f020271396f6f4d1dbf25cf9a5891806ed53ed5756362beb8e593b38",
+  "chrome/rules_cname.json": "4dd497387c26737f14a56027361ff56bd602a361e6402f6ef1afeac95b739118",
+  "chrome/rules_hosts.json": "90f5a3d1bee1201bc283594599e4497f6c47f4d98e146ce51b286c191249dd63",
+  "chrome/rules_params.json": "d782693ae38247044f027039f02050e78ba907fbf28f7948fa41d6069343a634",
+  "chrome/rulesets.json": "553cf1ce2b7275e6424a2efe385b7510d7a88b03baacd04ff50d28a4c121ff71",
+  "chrome/scriptlets.json": "721c773b15445a39aa5a2e94cfda3bfa4c1af9089888f27d8e826d6b3b7b3834",
+  "safari/ads.json": "2a80049cef4beef2845e4f0ce1bb5478e86054624456224d7b6ec4cd592aad4c",
+  "safari/privacy.json": "d7540edf52acd72f0f1e111b5d3b0af123fea4cddca6e8637a867acc7423ebe5",
+  "safari/hosts.json": "415757852ee71c68e68371d44847992afdecf2e3bb2e5269207a40e7d4b0a445",
+  "safari/cosmetic.json": "9325eb168f24741731163f8fc2bc1f08ef22d176c545a10d53703377ef86b93a",
+  "dns/blocklist.txt": "7f71468df67ad78eb05da21573c79f588cfa07e5065fd49c85dd5c38dd47a97d",
+  "dns/allowlist.txt": "048f28e13dad7d7735b39e20ad9ce5cc37ed9a46fcb2c9557ffc140c11e3a6a9",
+  "dns/cname_targets.txt": "8be112ceb7003da110b82a1e905af59ee32506eb7e9e7db3827f79d06a0d905a",
+  "dns/compat.txt": "2fcc3dacd4257828d9c755edafeffcfd64abcbb4d412ffd9676f1053c5535f33",
+  "dns/dga_model.txt": "9ac00120e6deae78b61d3a34a4738adaa9da6c682e17d49191ac280811730fc9",
+  "rep/prefixes.rice": "2d807061be872110d3d91db83b354f4ee66ef9ba72252b2997314b698c011f32"
+ },
+ "selectorValidation": {
+  "checked": 24469,
+  "invalid": [
+   "article:has(header:has(.ct-sponsored))",
+   "div > [style]:has([style]:has([href*=\"&utm\"]))",
+   "div:has(> div:has(> .adsbygoogle))",
+   "div[data-test-id=\"MainDiscoveryContent\"] li:has(> div.cb-elevated:has(button[data-test-id=\"AdvertisingLabel\"]))",
+   "p + div:has(.responsive-post:has([href^=\"https://www.semrush.com\"]))"
+  ]
+ },
+ "cosmetic": {
+  "generic": 13676,
+  "generic_except": 14,
+  "specific_domains": 8266,
+  "specific_selectors": 17472,
+  "exception_domains": 671,
+  "dropped_invalid_selectors": 5
+ },
+ "chromeTotalRules": 15439,
+ "scriptlets": {
+  "domains": 2260,
+  "rules": 3064,
+  "by_scriptlet": {
+   "abort-on-property-read": 691,
+   "addEventListener-defuser": 193,
+   "abort-current-script": 651,
+   "no-window-open-if": 108,
+   "set-constant": 913,
+   "no-setTimeout-if": 233,
+   "no-setInterval-if": 26,
+   "abort-on-property-write": 213,
+   "json-prune": 36
+  }
+ },
+ "safariCosmetic": {
+  "rules": 7848,
+  "over_limit": false
+ },
+ "dns": {
+  "from_filters": 87424,
+  "candidates": 162293,
+  "after_minimize": 125409,
+  "allowlisted_removed": 1,
+  "domains": 125408,
+  "allow": 7,
+  "cname_targets": 99,
+  "compat": 7,
+  "dga": {
+   "flagThreshold": -3.688,
+   "blockThreshold": -4.026
+  }
+ },
+ "reputation": {
+  "sources": [
+   {
+    "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/tif-onlydomains.txt",
+    "version": "14 Nov 2026 08:06 UTC",
+    "license": "GPL-3.0"
+   },
+   {
+    "url": "https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-domains-ACTIVE.txt",
+    "version": null,
+    "license": "MIT"
+   }
+  ],
+  "input": 1832097,
+  "invalid": 615,
+  "droppedProtected": [
+   "000webhost.com",
+   "1nimo.com",
+   "51gxqm.com",
+   "8800.org",
+   "abcdnf.com",
+   "absoluteclickscom.com",
+   "adplxmd.com",
+   "adservone.com",
+   "adult-empire.com",
+   "adxcore.com",
+   "allin1convert.com",
+   "americasfreedomfighters.com",
+   "ampclicks.com",
+   "angelfire.com",
+   "apkpure.com",
+   "appscase.com",
+   "apytrc.com",
+   "bit.ly",
+   "bootcss.com",
+   "bringmesports.com",
+   "brndrm.com",
+   "brucelead.com",
+   "ccm.net",
+   "cityadspix.com",
+   "clickadu.com",
+   "cpmfx.com",
+   "dardarkom.com",
+   "delta-homes.com",
+   "delta-search.com",
+   "djmaza.info",
+   "dramacool.to",
+   "easybitcoinfaucet.com",
+   "easydocmerge.com",
+   "easyphotoedit.com",
+   "eazel.com",
+   "espeedcheck.com",
+   "freeradiocast.com",
+   "fromdoctopdf.com",
+   "frtye.com",
+   "gamingwonderland.com",
+   "getformsonline.com",
+   "getpocket.com",
+   "gogoanime.com",
+   "gomusix.com",
+   "gravatar.com",
+   "hashflare.io",
+   "hilltopads.net",
+   "hipersushiads.com",
+   "htmlhubing.xyz",
+   "huabian.com",
+   "inspsearch.com",
+   "internetspeedtracker.com",
+   "istartsurf.com",
+   "junbi-tracker.com",
+   "leadzu.com",
+   "lilplay.com",
+   "limetorrents.cc",
+   "loading-delivery2.com",
+   "lordpopup.com",
+   "maxonclick.com",
+   "me2.do",
+   "media-fire.org",
+   "medianewtab.com",
+   "megapopads.com",
+   "mercadolibre.cl",
+   "mercadolibre.com.ar",
+   "mercadolibre.com.uy",
+   "mihanblog.com",
+   "mixplugin.com",
+   "motitags.com",
+   "mylot.com",
+   "mynativeplatform.com",
+   "mystartsearch.com",
+   "name.com",
+   "nameguess.com",
+   "nullrefer.com",
+   "omiga-plus.com",
+   "onclickpredictiv.com",
+   "onclicktop.com",
+   "online-life.cc",
+   "onlinemapfinder.com",
+   "onlinesupaads.com",
+   "palikan.com",
+   "parallaxsearch.com",
+   "pastebin.com",
+   "pconverter.com",
+   "popkade.ir",
+   "popmog.com",
+   "productivityboss.com",
+   "qtrax.com",
+   "redirectvoluum.com",
+   "reimageplus.com",
+   "rev2pub.com",
+   "safefinder.com",
+   "searchalgo.com",
+   "searchincognito.com",
+   "sidecubes.com",
+   "slopeaota.com",
+   "smrtgs.com",
+   "srv2trking.com",
+   "strtpoint.com",
+   "terraclicks.com",
+   "tfilm.me",
+   "thewhizproducts.com",
+   "topcpm.com",
+   "totaladperformance.com",
+   "toukoucity.to",
+   "trackingclick.net",
+   "trackvoluum.com",
+   "trklnks.com",
+   "tzarmedia.com",
+   "uninstallmaster.com",
+   "v9.com",
+   "venturead.com",
+   "vi-view.com",
+   "vid.ag",
+   "vidzi.tv",
+   "voluumtrk.com",
+   "webssearches.com",
+   "yesimright.com",
+   "yessearches.com",
+   "yoursearch.me",
+   "zalukaj.com",
+   "ziddu.com"
+  ],
+  "coveredByParent": 39235,
+  "entries": 1792123,
+  "domains": 1792123,
+  "hashes": 1792123,
+  "prefixes": 1791729,
+  "riceK": 10,
+  "prefixBytes": 2883986,
+  "bitsPerPrefix": 12.88,
+  "shardEntries": {
+   "min": 363,
+   "max": 527,
+   "mean": 437.5
+  },
+  "localFalseHitRate": 0.0004171694163233042
+ }
+}

@@ -1,0 +1,8 @@
+{
+ "generatedAt": "2026-11-14T10:33:40+00:00",
+ "format": "see nullroute_compiler/reputation.py",
+ "shardBits": 12,
+ "headBytes": 8,
+ "entries": 1792123,
+ "prefixes": 1791729
+}
